@@ -4,6 +4,7 @@ Provides a modern web interface for product discovery and analysis
 """
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask_cors import CORS
 import os
 import json
 import glob
@@ -23,6 +24,9 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = 'winning_product_finder_secret_key'
+
+# Enable CORS for GitHub Pages
+CORS(app, resources={r"/api/*": {"origins": ["https://*.github.io", "http://localhost:5000"]}})
 
 # Global variables for pipeline status
 pipeline_status = {

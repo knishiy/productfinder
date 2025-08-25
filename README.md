@@ -19,7 +19,9 @@ This project uses a **frontend/backend separation** approach:
 
 ```
 WinningProdAgr/
-├── index_github_pages.html    # GitHub Pages frontend
+├── docs/                      # GitHub Pages frontend
+│   ├── index.html            # Main landing page
+│   └── README.md             # Frontend documentation
 ├── web_app.py                 # Flask backend API
 ├── pipeline.py                # Product analysis pipeline
 ├── etl/                       # Data extraction modules
@@ -28,6 +30,7 @@ WinningProdAgr/
 ├── scoring.py                 # Product scoring
 ├── config.yaml                # Configuration
 ├── requirements.txt            # Python dependencies
+├── runtime.txt                # Python version for Render
 └── README.md                  # This file
 ```
 
@@ -51,14 +54,12 @@ WinningProdAgr/
 
 ### 2. Deploy Frontend to GitHub Pages
 
-1. **Create a new GitHub repository** for the frontend
-2. **Upload `index_github_pages.html`** to the repository
-3. **Rename it to `index.html`** (GitHub Pages requirement)
-4. **Enable GitHub Pages**:
+1. **Push the `docs/` folder** to your GitHub repository
+2. **Enable GitHub Pages**:
    - Go to Settings → Pages
    - Source: Deploy from a branch
    - Branch: main (or master)
-   - Folder: / (root)
+   - Folder: /docs
 
 ### 3. Update Backend URL
 
