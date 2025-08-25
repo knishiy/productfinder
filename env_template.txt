@@ -1,0 +1,11 @@
+# Copy this file to .env and fill in your actual API keys
+
+# eBay API (prod keys)
+EBAY_CLIENT_ID=xxxxxxxxxxxxxxxx
+EBAY_CLIENT_SECRET=xxxxxxxxxxxxxxxx
+
+# Apify (temporary AliExpress search)
+APIFY_TOKEN=apify_xxxxxxxxxxxxx
+
+# Optional later
+KEEPA_KEY=xxxxxxxxxxxxxxxx

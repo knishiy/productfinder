@@ -1,0 +1,35 @@
+{
+  "timestamp": "2025-08-24T21:11:59.254729",
+  "total_market_products": 0,
+  "total_supplier_products": 0,
+  "total_matches": 1,
+  "winning_products": 0,
+  "output_files": [
+    "data/scoring/scoring_results_20250824_211159.json"
+  ],
+  "scoring_summary": {
+    "winning_products": [],
+    "flagged_products": [],
+    "all_scored": [
+      {
+        "match_id": "ebay:demo123_unknown",
+        "margin_pct": 0.0,
+        "sales_velocity": 0.0,
+        "trend_growth_14d": 0.0,
+        "price_stability": 0.5,
+        "competition_density": 25.0,
+        "lead_time_days": 15.0,
+        "seller_rating": 4.5,
+        "ip_brand_flag": false,
+        "saturation_cluster": 0,
+        "score_overall": 0.18277777777777782
+      }
+    ],
+    "summary": {
+      "count_all": 1,
+      "count_winners": 0,
+      "avg_score": 0.18277777777777782
+    }
+  },
+  "top_products": []
+}

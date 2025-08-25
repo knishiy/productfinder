@@ -1,0 +1,143 @@
+# Winning Product Finder Configuration
+
+# Run mode
+run_mode: "mvp"
+
+# Scan configuration
+scan:
+  ship_to: "US"
+  landed_cap_usd: 10.0
+  lead_time_max_days: 15
+  min_score: 0.65
+
+# Data sources configuration
+sources:
+  ebay:
+    enabled: true
+    categories: ["177772", "63514"]   # Pet Supplies, Cell Phone Accessories (examples)
+    keywords: ["pet nail grinder", "phone stand", "cable organizer"]
+    limit: 120
+  amazon:
+    enabled: false   # turn on later after Keepa/PA-API
+  trends:
+    enabled: true
+    keywords: ["pet nail grinder", "phone stand", "cable organizer",
+               "lint remover", "mini flashlight", "soap dispenser"]
+    timeframe: "today 1-m"
+    geo: "US"
+  aliexpress:
+    enabled: true
+    provider: "apify"   # "official" later when you get Open Platform keys
+    max_results: 20
+
+# Matching configuration
+matching:
+  title_threshold: 0.65
+  use_image_phash: true
+
+# Scoring configuration
+scoring:
+  min_margin_pct: 0.25
+  penalties:
+    ip_brand: 0.25
+    low_seller_rating: 0.10
+    saturation: 0.10
+
+# Product Categories and Keywords to Monitor
+categories:
+  electronics:
+    - id: "15032"
+      name: "Cell Phones & Accessories"
+      keywords: ["wireless earbuds", "phone case", "charging cable", "screen protector"]
+    - id: "293"
+      name: "Electronics"
+      keywords: ["bluetooth speaker", "power bank", "usb hub", "wireless charger"]
+  
+  home_garden:
+    - id: "159912"
+      name: "Home & Garden"
+      keywords: ["kitchen gadgets", "garden tools", "home decor", "cleaning supplies"]
+  
+  fashion:
+    - id: "11450"
+      name: "Jewelry & Watches"
+      keywords: ["necklace", "bracelet", "ring", "watch"]
+    - id: "15724"
+      name: "Shoes"
+      keywords: ["sneakers", "sandals", "boots", "flats"]
+
+# Cost and Risk Thresholds
+costing:
+  landed_cost_cap: 10.00  # Base cap in USD
+  risk_factor_multiplier: 1.5  # Multiplier for higher-priced items
+  max_acceptable_cost: 25.00  # Absolute maximum cost
+  shipping_buffer_percent: 5  # Buffer for shipping costs
+  max_lead_time_days: 15
+
+# Scoring Weights
+scoring:
+  margin_weight: 0.35
+  demand_velocity_weight: 0.20
+  trend_growth_weight: 0.15
+  price_stability_weight: 0.10
+  competition_density_weight: 0.10
+  lead_time_weight: 0.10
+  
+  # Penalty weights
+  ip_brand_penalty: 0.25
+  low_seller_rating_penalty: 0.10
+  saturation_penalty: 0.10
+
+# Matching Thresholds
+matching:
+  min_title_similarity: 0.65
+  min_image_similarity: 0.65
+  min_overall_score: 0.65
+  min_margin_percent: 25
+  max_suppliers_per_item: 5
+
+# Data Collection Settings
+data_collection:
+  ebay:
+    search_limit: 200
+    merchandised_limit: 100
+    update_frequency_hours: 6
+  
+  amazon:
+    update_frequency_hours: 12
+  
+  trends:
+    timeframe: "today 1-m"
+    region: "US"
+    update_frequency_hours: 24
+  
+  suppliers:
+    update_frequency_hours: 8
+
+# Risk Assessment
+risk_assessment:
+  # Brand/IP keywords to flag
+  denied_brands:
+    - "apple"
+    - "samsung"
+    - "sony"
+    - "nike"
+    - "adidas"
+  
+  # High-risk product categories
+  high_risk_categories:
+    - "counterfeit"
+    - "replica"
+    - "fake"
+    - "knockoff"
+  
+  # Seller rating thresholds
+  min_seller_rating: 4.5
+  preferred_seller_rating: 4.8
+
+# Output Settings
+output:
+  save_raw_data: true
+  save_processed_data: true
+  export_formats: ["csv", "json"]
+  discord_webhook_url: "YOUR_DISCORD_WEBHOOK_URL"

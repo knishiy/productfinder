@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - WPF</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .navbar-brand {
+            color: white !important;
+            font-weight: 700;
+        }
+        
+        .nav-link {
+            color: rgba(255,255,255,0.8) !important;
+        }
+        
+        .nav-link:hover {
+            color: white !important;
+        }
+        
+        .dashboard-header {
+            background: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            transition: transform 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+        
+        .stat-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        
+        .pipeline-card {
+            background: white;
+            border-radius: 15px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        
+        .progress {
+            height: 25px;
+            border-radius: 15px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border: none;
+            border-radius: 25px;
+            padding: 12px 30px;
+            font-weight: 600;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .results-card {
+            background: white;
+            border-radius: 15px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        
+        .product-row {
+            border-bottom: 1px solid #e9ecef;
+            padding: 1rem 0;
+        }
+        
+        .product-row:last-child {
+            border-bottom: none;
+        }
+        
+        .score-badge {
+            font-size: 0.8rem;
+            padding: 0.5rem 0.8rem;
+            border-radius: 20px;
+        }
+        
+        .winner-badge {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin: 1rem 0;
+        }
+        
+        .loading-spinner {
+            display: none;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-running {
+            background-color: #ffc107;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .status-completed {
+            background-color: #28a745;
+        }
+        
+        .status-error {
+            background-color: #dc3545;
+        }
+        
+        .alert-sm {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+        }
+        
+        .btn-close-sm {
+            padding: 0.25rem;
+            font-size: 0.75rem;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-rocket me-2"></i>
+                WPF
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/dashboard">Dashboard</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Dashboard Header -->
+    <section class="dashboard-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h1 class="mb-2">Product Discovery Dashboard</h1>
+                    <p class="text-muted mb-0">Monitor your product research pipeline and discover winning opportunities</p>
+                </div>
+                                 <div class="col-md-4 text-end">
+                     <button id="startPipelineBtn" class="btn btn-primary btn-lg me-2">
+                         <i class="fas fa-play me-2"></i>
+                         Start Pipeline
+                     </button>
+                     <button id="stopPipelineBtn" class="btn btn-danger btn-lg" style="display: none;">
+                         <i class="fas fa-stop me-2"></i>
+                         Stop Pipeline
+                     </button>
+                 </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Main Content -->
+    <div class="container">
+        <!-- Pipeline Status -->
+        <div class="pipeline-card">
+            <h4 class="mb-3">
+                <i class="fas fa-cogs me-2"></i>
+                Pipeline Status
+            </h4>
+            
+            <div id="pipelineStatus">
+                <div class="text-center text-muted">
+                    <i class="fas fa-info-circle fa-2x mb-3"></i>
+                    <p>No pipeline running. Click "Start Pipeline" to begin product discovery.</p>
+                </div>
+            </div>
+            
+            <div id="pipelineProgress" style="display: none;">
+                <div class="d-flex justify-content-between mb-2">
+                    <span id="currentStep">Initializing...</span>
+                    <span id="progressPercent">0%</span>
+                </div>
+                <div class="progress mb-3">
+                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                         role="progressbar" style="width: 0%"></div>
+                </div>
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Pipeline is running. This may take several minutes.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics -->
+        <div class="row" id="statsSection" style="display: none;">
+            <div class="col-md-3">
+                <div class="stat-card text-center">
+                    <div class="stat-icon text-primary">
+                        <i class="fas fa-shopping-bag"></i>
+                    </div>
+                    <div class="stat-number" id="totalMarketProducts">0</div>
+                    <div class="stat-label">Market Products</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card text-center">
+                    <div class="stat-icon text-info">
+                        <i class="fas fa-truck"></i>
+                    </div>
+                    <div class="stat-number" id="totalSupplierProducts">0</div>
+                    <div class="stat-label">Supplier Products</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card text-center">
+                    <div class="stat-icon text-warning">
+                        <i class="fas fa-link"></i>
+                    </div>
+                    <div class="stat-number" id="totalMatches">0</div>
+                    <div class="stat-label">Product Matches</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card text-center">
+                    <div class="stat-icon text-success">
+                        <i class="fas fa-trophy"></i>
+                    </div>
+                    <div class="stat-number" id="winningProducts">0</div>
+                    <div class="stat-label">Winning Products</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results -->
+        <div class="results-card" id="resultsSection" style="display: none;">
+                         <div class="d-flex justify-content-between align-items-center mb-3">
+                 <h4 class="mb-0">
+                     <i class="fas fa-list me-2"></i>
+                     Products
+                 </h4>
+                 <div class="d-flex align-items-center">
+                     <div class="btn-group me-3" role="group">
+                         <button type="button" class="btn btn-outline-primary active" id="showAllBtn" onclick="showAllProducts()">
+                             All Scored
+                         </button>
+                         <button type="button" class="btn btn-outline-primary" id="showWinnersBtn" onclick="showWinnersOnly()">
+                             Winners Only
+                         </button>
+                     </div>
+                     <button id="exportCsvBtn" class="btn btn-outline-primary">
+                         <i class="fas fa-download me-2"></i>
+                         Export CSV
+                     </button>
+                 </div>
+             </div>
+            
+            <div id="productsTable">
+                <!-- Products will be loaded here -->
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="row" id="chartsSection" style="display: none;">
+            <div class="col-md-6">
+                <div class="results-card">
+                    <h5 class="mb-3">Score Distribution</h5>
+                    <div class="chart-container">
+                        <canvas id="scoreDistributionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="results-card">
+                    <h5 class="mb-3">Average Scores by Category</h5>
+                    <div class="chart-container">
+                        <canvas id="categoryScoresChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pipeline Log -->
+        <div class="results-card">
+            <h4 class="mb-3">
+                <i class="fas fa-list-alt me-2"></i>
+                Pipeline Log
+            </h4>
+            <div id="pipelineLog">
+                <div class="text-center text-muted">
+                    <i class="fas fa-info-circle fa-2x mb-3"></i>
+                    <p>No pipeline runs yet. Click "Start Pipeline" to begin.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Modal -->
+    <div class="modal fade" id="loadingModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-body text-center p-4">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <h5>Pipeline Running</h5>
+                    <p class="text-muted">Please wait while we analyze products and find winning opportunities.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
+    
+    <script>
+                 // Global variables
+         let pipelineRunning = false;
+         let statusCheckInterval = null;
+         let charts = {};
+         let currentResults = null;
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeDashboard();
+            setupEventListeners();
+        });
+
+        function initializeDashboard() {
+            // Load existing results if available
+            loadResults();
+            
+            // Check pipeline status
+            checkPipelineStatus();
+        }
+
+                 function setupEventListeners() {
+             document.getElementById('startPipelineBtn').addEventListener('click', startPipeline);
+             document.getElementById('stopPipelineBtn').addEventListener('click', stopPipeline);
+             document.getElementById('exportCsvBtn').addEventListener('click', exportCsv);
+         }
+
+                 async function startPipeline() {
+             try {
+                 const response = await fetch('/api/start_pipeline', {
+                     method: 'POST',
+                     headers: {
+                         'Content-Type': 'application/json'
+                     }
+                 });
+
+                 const data = await response.json();
+
+                 if (response.ok) {
+                     showPipelineProgress();
+                     startStatusMonitoring();
+                     showNotification('Pipeline started successfully!', 'success');
+                     addToLog('Pipeline started', 'info');
+                 } else {
+                     showNotification(data.error || 'Failed to start pipeline', 'error');
+                     addToLog(`Failed to start pipeline: ${data.error}`, 'error');
+                 }
+             } catch (error) {
+                 console.error('Error starting pipeline:', error);
+                 showNotification('Failed to start pipeline', 'error');
+             }
+         }
+
+         async function stopPipeline() {
+             try {
+                 const response = await fetch('/api/stop_pipeline', {
+                     method: 'POST',
+                     headers: {
+                         'Content-Type': 'application/json'
+                     }
+                 });
+
+                 const data = await response.json();
+
+                 if (response.ok) {
+                     showNotification('Pipeline stop requested', 'success');
+                     addToLog('Pipeline stop requested', 'info');
+                     
+                     // Reset UI
+                     document.getElementById('pipelineProgress').style.display = 'none';
+                     document.getElementById('startPipelineBtn').style.display = 'inline-block';
+                     document.getElementById('stopPipelineBtn').style.display = 'none';
+                     
+                     // Update status
+                     document.getElementById('pipelineStatus').style.display = 'block';
+                     document.getElementById('pipelineStatus').innerHTML = `
+                         <div class="text-center text-warning">
+                             <i class="fas fa-pause-circle fa-2x mb-3"></i>
+                             <h5>Pipeline Stopped</h5>
+                             <p class="text-muted">Pipeline was stopped by user request.</p>
+                             <button class="btn btn-primary" onclick="startPipeline()">Start New Pipeline</button>
+                         </div>
+                     `;
+                     
+                     pipelineRunning = false;
+                     if (statusCheckInterval) {
+                         clearInterval(statusCheckInterval);
+                     }
+                 } else {
+                     showNotification(data.error || 'Failed to stop pipeline', 'error');
+                     addToLog(`Failed to stop pipeline: ${data.error}`, 'error');
+                 }
+             } catch (error) {
+                 console.error('Error stopping pipeline:', error);
+                 showNotification('Failed to stop pipeline', 'error');
+             }
+         }
+
+                 function showPipelineProgress() {
+             document.getElementById('pipelineStatus').style.display = 'none';
+             document.getElementById('pipelineProgress').style.display = 'block';
+             document.getElementById('startPipelineBtn').style.display = 'none';
+             document.getElementById('stopPipelineBtn').style.display = 'inline-block';
+             pipelineRunning = true;
+         }
+
+        function startStatusMonitoring() {
+            // Check status every 2 seconds
+            statusCheckInterval = setInterval(checkPipelineStatus, 2000);
+        }
+
+        async function checkPipelineStatus() {
+            try {
+                const response = await fetch('/api/pipeline_status');
+                const status = await response.json();
+
+                if (status.running) {
+                    updatePipelineProgress(status);
+                    updatePipelineStatus(status);
+                } else {
+                    // Pipeline completed or failed
+                    clearInterval(statusCheckInterval);
+                    pipelineRunning = false;
+                    document.getElementById('startPipelineBtn').disabled = false;
+                    
+                    if (status.error) {
+                        showPipelineError(status.error);
+                    } else {
+                        showPipelineComplete();
+                        loadResults();
+                    }
+                    
+                    updatePipelineStatus(status);
+                }
+            } catch (error) {
+                console.error('Error checking pipeline status:', error);
+            }
+        }
+
+        function updatePipelineProgress(status) {
+            const progressBar = document.getElementById('progressBar');
+            const progressPercent = document.getElementById('progressPercent');
+            const currentStep = document.getElementById('currentStep');
+
+            progressBar.style.width = status.progress + '%';
+            progressPercent.textContent = status.progress + '%';
+            currentStep.textContent = status.current_step;
+        }
+
+                 function showPipelineComplete() {
+             document.getElementById('pipelineProgress').style.display = 'none';
+             document.getElementById('pipelineStatus').style.display = 'block';
+             document.getElementById('startPipelineBtn').style.display = 'inline-block';
+             document.getElementById('stopPipelineBtn').style.display = 'none';
+             document.getElementById('pipelineStatus').innerHTML = `
+                 <div class="text-center text-success">
+                     <i class="fas fa-check-circle fa-2x mb-3"></i>
+                     <h5>Pipeline Completed Successfully!</h5>
+                     <p class="text-muted">Product analysis is complete. View results below.</p>
+                 </div>
+             `;
+             
+             // Add to log
+             addToLog('Pipeline completed successfully', 'success');
+         }
+
+                 function showPipelineError(error) {
+             document.getElementById('pipelineProgress').style.display = 'none';
+             document.getElementById('pipelineStatus').style.display = 'block';
+             document.getElementById('startPipelineBtn').style.display = 'inline-block';
+             document.getElementById('stopPipelineBtn').style.display = 'none';
+             document.getElementById('pipelineStatus').innerHTML = `
+                 <div class="text-center text-danger">
+                     <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
+                     <h5>Pipeline Failed</h5>
+                     <p class="text-muted">${error}</p>
+                     <button class="btn btn-primary" onclick="startPipeline()">Try Again</button>
+                 </div>
+             `;
+             
+             // Add to log
+             addToLog(`Pipeline failed: ${error}`, 'error');
+         }
+
+                 async function loadResults() {
+             try {
+                 const response = await fetch('/api/results_view');
+                 const results = await response.json();
+
+                 if (results && results.total_count > 0) {
+                     displayResults(results);
+                 }
+             } catch (error) {
+                 console.error('Error loading results:', error);
+             }
+         }
+
+                 function displayResults(results) {
+             // Store results for toggling
+             currentResults = results;
+             
+             // Show sections
+             document.getElementById('statsSection').style.display = 'block';
+             document.getElementById('resultsSection').style.display = 'block';
+             document.getElementById('chartsSection').style.display = 'block';
+
+             // Update statistics
+             document.getElementById('totalMarketProducts').textContent = results.total_count;
+             document.getElementById('totalSupplierProducts').textContent = results.total_count;
+             document.getElementById('totalMatches').textContent = results.total_count;
+             document.getElementById('winningProducts').textContent = results.winners_count;
+
+             // Display products table (default to all scored)
+             displayProductsTable(results.all_scored);
+
+             // Create charts
+             createCharts(results);
+         }
+
+         function showAllProducts() {
+             if (currentResults) {
+                 document.getElementById('showAllBtn').classList.add('active');
+                 document.getElementById('showWinnersBtn').classList.remove('active');
+                 displayProductsTable(currentResults.all_scored);
+             }
+         }
+
+         function showWinnersOnly() {
+             if (currentResults) {
+                 document.getElementById('showWinnersBtn').classList.add('active');
+                 document.getElementById('showAllBtn').classList.remove('active');
+                 displayProductsTable(currentResults.winners);
+             }
+         }
+
+        function displayProductsTable(products) {
+            const tableContainer = document.getElementById('productsTable');
+            
+            if (!products || products.length === 0) {
+                tableContainer.innerHTML = '<p class="text-muted text-center">No products found.</p>';
+                return;
+            }
+
+            let tableHTML = `
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Product</th>
+                                <th>Final Score</th>
+                                <th>Margin Score</th>
+                                <th>Demand Score</th>
+                                <th>Trend Score</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            products.forEach(product => {
+                const winnerBadge = product.is_winner ? 
+                    '<span class="badge winner-badge">Winner</span>' : 
+                    '<span class="badge bg-secondary">Candidate</span>';
+
+                tableHTML += `
+                    <tr class="product-row">
+                        <td><strong>#${product.rank}</strong></td>
+                        <td>
+                            <div class="fw-bold">${product.title}</div>
+                        </td>
+                        <td>
+                            <span class="score-badge bg-primary">${(product.final_score * 100).toFixed(1)}%</span>
+                        </td>
+                        <td>
+                            <span class="score-badge bg-info">${(product.margin_score * 100).toFixed(1)}%</span>
+                        </td>
+                        <td>
+                            <span class="score-badge bg-warning">${(product.demand_score * 100).toFixed(1)}%</span>
+                        </td>
+                        <td>
+                            <span class="score-badge bg-success">${(product.trend_score * 100).toFixed(1)}%</span>
+                        </td>
+                        <td>${winnerBadge}</td>
+                    </tr>
+                `;
+            });
+
+            tableHTML += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            tableContainer.innerHTML = tableHTML;
+        }
+
+        function createCharts(results) {
+            // Score Distribution Chart
+            const scoreCtx = document.getElementById('scoreDistributionChart').getContext('2d');
+            charts.scoreDistribution = new Chart(scoreCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Excellent (90%+)', 'Good (80-89%)', 'Fair (70-79%)', 'Poor (<70%)'],
+                    datasets: [{
+                        data: [25, 35, 25, 15], // Example data
+                        backgroundColor: ['#28a745', '#17a2b8', '#ffc107', '#dc3545']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Category Scores Chart
+            const categoryCtx = document.getElementById('categoryScoresChart').getContext('2d');
+            charts.categoryScores = new Chart(categoryCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Margin', 'Demand', 'Trend', 'Stability', 'Competition'],
+                    datasets: [{
+                        label: 'Average Score',
+                        data: [75, 65, 80, 70, 60], // Example data
+                        backgroundColor: 'rgba(102, 126, 234, 0.8)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+        }
+
+        async function exportCsv() {
+            try {
+                const response = await fetch('/api/export_csv');
+                const data = await response.json();
+
+                if (response.ok) {
+                    showNotification('CSV exported successfully!', 'success');
+                } else {
+                    showNotification(data.error || 'Failed to export CSV', 'error');
+                }
+            } catch (error) {
+                console.error('Error exporting CSV:', error);
+                showNotification('Failed to export CSV', 'error');
+            }
+        }
+
+        function showNotification(message, type) {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `alert alert-${type === 'success' ? 'success' : 'danger'} alert-dismissible fade show position-fixed`;
+            notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+            notification.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+
+            document.body.appendChild(notification);
+
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 5000);
+        }
+
+        function addToLog(message, type) {
+            const logContainer = document.getElementById('pipelineLog');
+            const timestamp = new Date().toLocaleString();
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = `alert alert-${type === 'success' ? 'success' : 'danger'} alert-sm mb-2`;
+            logEntry.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center">
+                    <span><strong>${timestamp}</strong> - ${message}</span>
+                    <button type="button" class="btn-close btn-close-sm" onclick="this.parentElement.parentElement.remove()"></button>
+                </div>
+            `;
+            
+            // Add to top of log
+            logContainer.insertBefore(logEntry, logContainer.firstChild);
+            
+            // Keep only last 10 entries
+            const entries = logContainer.querySelectorAll('.alert');
+            if (entries.length > 10) {
+                entries[entries.length - 1].remove();
+            }
+        }
+
+        function updatePipelineStatus(status) {
+            const statusContainer = document.getElementById('pipelineStatus');
+            
+            if (status.running) {
+                statusContainer.innerHTML = `
+                    <div class="text-center text-primary">
+                        <i class="fas fa-cogs fa-2x mb-3"></i>
+                        <h5>Pipeline Running</h5>
+                        <p class="text-muted">Currently processing: ${status.current_step}</p>
+                    </div>
+                `;
+            } else if (status.error) {
+                statusContainer.innerHTML = `
+                    <div class="text-center text-danger">
+                        <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
+                        <h5>Pipeline Failed</h5>
+                        <p class="text-muted">${status.error}</p>
+                        <button class="btn btn-primary" onclick="startPipeline()">Try Again</button>
+                    </div>
+                `;
+            } else {
+                statusContainer.innerHTML = `
+                    <div class="text-center text-muted">
+                        <i class="fas fa-info-circle fa-2x mb-3"></i>
+                        <p>No pipeline running. Click "Start Pipeline" to begin product discovery.</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
