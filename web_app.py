@@ -61,13 +61,17 @@ def start_pipeline():
         return jsonify({"error": "Pipeline already running"}), 400
     
     try:
-        # Start pipeline in background thread
+        # Get configuration from request
+        config_data = request.json or {}
+        
+        # Store configuration for the background thread
+        pipeline_status["config"] = config_data
         pipeline_status["running"] = True
         pipeline_status["progress"] = 0
         pipeline_status["current_step"] = "Initializing..."
         pipeline_status["error"] = None
         
-        thread = threading.Thread(target=run_pipeline_background)
+        thread = threading.Thread(target=run_pipeline_background, args=(config_data,))
         thread.daemon = True
         thread.start()
         
@@ -209,8 +213,8 @@ def update_config():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-def run_pipeline_background():
-    """Run pipeline in background thread"""
+def run_pipeline_background(config_data):
+    """Run pipeline in background thread with configuration"""
     global pipeline_status, cached_results
     
     try:
@@ -223,35 +227,45 @@ def run_pipeline_background():
             logger.info("Pipeline stopped by user request")
             return
         
+        # Create dynamic config based on user input
+        dynamic_config = create_dynamic_config(config_data)
+        
         pipeline = WinningProductPipeline("config.yaml")
         
-        # Step 1: Market data collection
-        pipeline_status["current_step"] = "Collecting market data from eBay..."
-        pipeline_status["progress"] = 20
-        if not pipeline_status["running"]:
-            return
-        pipeline._collect_market_data()
+        # Apply dynamic configuration
+        apply_dynamic_config(pipeline, dynamic_config)
         
-        # Step 2: Amazon data collection
-        pipeline_status["current_step"] = "Collecting Amazon data from Keepa..."
-        pipeline_status["progress"] = 30
-        if not pipeline_status["running"]:
-            return
-        pipeline._collect_amazon_data()
+        # Step 1: Market data collection (conditional)
+        if config_data.get("sources", {}).get("ebay", True):
+            pipeline_status["current_step"] = "Collecting market data from eBay..."
+            pipeline_status["progress"] = 20
+            if not pipeline_status["running"]:
+                return
+            pipeline._collect_market_data()
         
-        # Step 3: Trends data collection
-        pipeline_status["current_step"] = "Collecting Google Trends data..."
-        pipeline_status["progress"] = 40
-        if not pipeline_status["running"]:
-            return
-        pipeline._collect_trends_data()
+        # Step 2: Amazon data collection (conditional)
+        if config_data.get("sources", {}).get("amazon", False):
+            pipeline_status["current_step"] = "Collecting Amazon data from Keepa..."
+            pipeline_status["progress"] = 30
+            if not pipeline_status["running"]:
+                return
+            pipeline._collect_amazon_data()
         
-        # Step 4: Supplier data collection
-        pipeline_status["current_step"] = "Collecting supplier data from AliExpress..."
-        pipeline_status["progress"] = 50
-        if not pipeline_status["running"]:
-            return
-        pipeline._collect_supplier_data()
+        # Step 3: Trends data collection (conditional)
+        if config_data.get("sources", {}).get("trends", True):
+            pipeline_status["current_step"] = "Collecting Google Trends data..."
+            pipeline_status["progress"] = 40
+            if not pipeline_status["running"]:
+                return
+            pipeline._collect_trends_data()
+        
+        # Step 4: Supplier data collection (conditional)
+        if config_data.get("sources", {}).get("aliexpress", True):
+            pipeline_status["current_step"] = "Collecting supplier data from AliExpress..."
+            pipeline_status["progress"] = 50
+            if not pipeline_status["running"]:
+                return
+            pipeline._collect_supplier_data()
         
         # Step 5: Product matching
         pipeline_status["current_step"] = "Matching products..."
@@ -316,6 +330,63 @@ def run_pipeline_background():
         
     finally:
         pipeline_status["running"] = False
+
+def create_dynamic_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Create dynamic configuration based on user input"""
+    dynamic_config = {}
+    
+    # Handle category
+    if config_data.get("category"):
+        dynamic_config["category"] = config_data["category"]
+    
+    # Handle keywords
+    if config_data.get("keywords"):
+        keywords = [kw.strip() for kw in config_data["keywords"].split(",") if kw.strip()]
+        dynamic_config["keywords"] = keywords
+    
+    # Handle product link
+    if config_data.get("productLink"):
+        dynamic_config["product_link"] = config_data["productLink"]
+    
+    # Handle max results
+    if config_data.get("maxResults"):
+        dynamic_config["max_results"] = config_data["maxResults"]
+    
+    # Handle sources
+    sources = config_data.get("sources", {})
+    dynamic_config["sources"] = {
+        "ebay": sources.get("ebay", True),
+        "trends": sources.get("trends", True),
+        "aliexpress": sources.get("aliexpress", True),
+        "amazon": sources.get("amazon", False)
+    }
+    
+    return dynamic_config
+
+def apply_dynamic_config(pipeline, dynamic_config: Dict[str, Any]):
+    """Apply dynamic configuration to pipeline"""
+    try:
+        # Update pipeline config with dynamic values
+        if "category" in dynamic_config:
+            pipeline.config["sources"]["ebay"]["categories"] = [dynamic_config["category"]]
+        
+        if "keywords" in dynamic_config:
+            pipeline.config["sources"]["ebay"]["keywords"] = dynamic_config["keywords"]
+            pipeline.config["sources"]["trends"]["keywords"] = dynamic_config["keywords"]
+            pipeline.config["sources"]["aliexpress"]["keywords"] = dynamic_config["keywords"]
+        
+        if "max_results" in dynamic_config:
+            pipeline.config["sources"]["aliexpress"]["max_results"] = dynamic_config["max_results"]
+        
+        # Update source enablement
+        for source, enabled in dynamic_config["sources"].items():
+            if source in pipeline.config["sources"]:
+                pipeline.config["sources"][source]["enabled"] = enabled
+        
+        logger.info(f"Applied dynamic configuration: {dynamic_config}")
+        
+    except Exception as e:
+        logger.warning(f"Failed to apply dynamic configuration: {e}")
 
 def save_results(results: Dict[str, Any]):
     """Save results to file"""
