@@ -1,89 +1,84 @@
 """
-Web Application for Winning Product Finder
-Provides a modern web interface for product discovery and analysis
+Flask Web Application for Winning Product Finder
+Provides web interface and API endpoints for the product discovery pipeline
 """
 
-from flask import Flask, render_template, request, jsonify, redirect, url_for
-from flask_cors import CORS
 import os
 import json
-import glob
-import pandas as pd
-from datetime import datetime
 import logging
-from typing import Dict, List, Any, Optional
 import threading
-import time
-
-# Import our pipeline
+import glob
+from datetime import datetime
+from typing import Dict, Any, Optional
+from flask import Flask, render_template, jsonify, request
+from flask_cors import CORS
 from pipeline import WinningProductPipeline
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Initialize Flask app
 app = Flask(__name__)
-app.secret_key = 'winning_product_finder_secret_key'
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-# Enable CORS for GitHub Pages
-CORS(app, resources={r"/api/*": {"origins": ["https://*.github.io", "http://localhost:5000"]}})
-
-# Global variables for pipeline status
+# Global variables for pipeline status and results
 pipeline_status = {
     "running": False,
-    "progress": 0,
     "current_step": "",
-    "results": None,
-    "error": None
+    "progress": 0,
+    "error": None,
+    "results": None
 }
 
-# Data storage
 cached_results = None
+pipeline_thread = None
 
 @app.route('/')
-def index():
-    """Main page"""
-    return render_template('index.html')
-
-@app.route('/dashboard')
 def dashboard():
-    """Dashboard with results"""
-    global cached_results
-    
-    if cached_results is None:
-        # Try to load latest results
-        cached_results = load_latest_results()
-    
-    return render_template('dashboard.html', results=cached_results)
+    """Main dashboard page"""
+    return render_template('dashboard.html')
+
+@app.route('/api/pipeline_status')
+def get_pipeline_status():
+    """Get current pipeline status"""
+    return jsonify(pipeline_status)
 
 @app.route('/api/start_pipeline', methods=['POST'])
 def start_pipeline():
-    """Start the product finding pipeline"""
-    global pipeline_status
+    """Start the product discovery pipeline"""
+    global pipeline_status, pipeline_thread
     
     if pipeline_status["running"]:
-        return jsonify({"error": "Pipeline already running"}), 400
+        return jsonify({"error": "Pipeline is already running"}), 400
     
     try:
         # Get configuration from request
-        config_data = request.json or {}
+        config_data = request.get_json(silent=True) or {}
         
-        # Store configuration for the background thread
-        pipeline_status["config"] = config_data
-        pipeline_status["running"] = True
-        pipeline_status["progress"] = 0
-        pipeline_status["current_step"] = "Initializing..."
-        pipeline_status["error"] = None
+        # Reset pipeline status
+        pipeline_status.update({
+            "running": True,
+            "current_step": "Starting pipeline...",
+            "progress": 0,
+            "error": None,
+            "results": None
+        })
         
-        thread = threading.Thread(target=run_pipeline_background, args=(config_data,))
-        thread.daemon = True
-        thread.start()
+        # Start pipeline in background thread
+        pipeline_thread = threading.Thread(
+            target=run_pipeline_background,
+            args=(config_data,),
+            daemon=True
+        )
+        pipeline_thread.start()
         
         return jsonify({"message": "Pipeline started successfully"})
         
     except Exception as e:
-        pipeline_status["running"] = False
         pipeline_status["error"] = str(e)
+        pipeline_status["running"] = False
+        logger.error(f"Failed to start pipeline: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/stop_pipeline', methods=['POST'])
@@ -95,104 +90,59 @@ def stop_pipeline():
         return jsonify({"error": "No pipeline running"}), 400
     
     try:
-        # Set stop flag
         pipeline_status["running"] = False
-        pipeline_status["current_step"] = "Stopping..."
-        pipeline_status["progress"] = 0
-        
+        pipeline_status["current_step"] = "Pipeline stop requested..."
         return jsonify({"message": "Pipeline stop requested"})
         
     except Exception as e:
+        logger.error(f"Failed to stop pipeline: {e}")
         return jsonify({"error": str(e)}), 500
-
-@app.route('/api/pipeline_status')
-def get_pipeline_status():
-    """Get current pipeline status"""
-    return jsonify(pipeline_status)
-
-@app.route('/api/results')
-def get_results():
-    """Get pipeline results"""
-    global cached_results
-    
-    if cached_results is None:
-        cached_results = load_latest_results()
-    
-    return jsonify(cached_results)
 
 @app.route('/api/results_view')
 def results_view():
-    """Get all scored products for display (not just winners)"""
-    try:
-        # Try to load from scoring results first
-        scoring_files = sorted(glob.glob("data/scoring/scoring_results_*.json"), reverse=True)
-        if scoring_files:
-            with open(scoring_files[0], 'r', encoding='utf-8') as f:
-                scoring_data = json.load(f)
-                all_scored = scoring_data.get("all_scored", [])
-                winning_products = scoring_data.get("winning_products", [])
-                
-                # Convert to view format
+    """Get results for display"""
+    global cached_results
+    
+    # Try to get scoring results first
+    if cached_results and cached_results.get("top_products"):
+        return jsonify(cached_results["top_products"])
+    
+    # If no scoring results, try to show market data from pipeline reports
+    report_files = sorted(glob.glob("data/reports/pipeline_summary_*.json"), reverse=True)
+    if report_files:
+        with open(report_files[0], 'r', encoding='utf-8') as f:
+            report_data = json.load(f)
+            market_products = report_data.get("market_products", [])
+            
+            if market_products:
+                # Convert market products to view format (without scoring data)
                 view_data = []
-                for i, product in enumerate(all_scored):
+                for i, product in enumerate(market_products):
                     view_item = {
                         "rank": i + 1,
                         "title": product.get("title", "Unknown Product"),
-                        "final_score": product.get("score_overall", 0.0),
-                        "margin_score": product.get("margin_pct", 0.0),
-                        "demand_score": product.get("sales_velocity", 0.0),
-                        "trend_score": product.get("trend_growth_14d", 0.0),
-                        "is_winner": product.get("score_overall", 0.0) >= 0.65,
-                        "landed_cost": product.get("landed_cost", 0.0),
-                        "sell_price": product.get("sell_price", 0.0),
-                        "lead_time_days": product.get("lead_time_days", 15),
-                        "seller_rating": product.get("seller_rating", 4.5),
-                        "competition_density": product.get("competition_density", 25.0),
-                        "price_stability": product.get("price_stability", 0.5)
+                        "final_score": "N/A",
+                        "margin_score": "N/A",
+                        "demand_score": "N/A",
+                        "trend_score": "N/A",
+                        "is_winner": False,
+                        "landed_cost": "N/A",
+                        "sell_price": product.get("price", 0.0),
+                        "lead_time_days": "N/A",
+                        "seller_rating": "N/A",
+                        "competition_density": "N/A",
+                        "price_stability": "N/A"
                     }
                     view_data.append(view_item)
                 
                 return jsonify(view_data)
-        
-        # If no scoring results, try to show market data from pipeline reports
-        report_files = sorted(glob.glob("data/reports/pipeline_summary_*.json"), reverse=True)
-        if report_files:
-            with open(report_files[0], 'r', encoding='utf-8') as f:
-                report_data = json.load(f)
-                market_products = report_data.get("market_products", [])
-                
-                if market_products:
-                    # Convert market products to view format (without scoring data)
-                    view_data = []
-                    for i, product in enumerate(market_products):
-                        view_item = {
-                            "rank": i + 1,
-                            "title": product.get("title", "Unknown Product"),
-                            "final_score": "N/A",
-                            "margin_score": "N/A",
-                            "demand_score": "N/A",
-                            "trend_score": "N/A",
-                            "is_winner": False,
-                            "landed_cost": "N/A",
-                            "sell_price": product.get("price", 0.0),
-                            "lead_time_days": "N/A",
-                            "seller_rating": "N/A",
-                            "competition_density": "N/A",
-                            "price_stability": "N/A"
-                        }
-                        view_data.append(view_item)
-                    
-                    return jsonify(view_data)
-        
-        # Fallback to cached results
-        if cached_results and cached_results.get("top_products"):
-            return jsonify(cached_results["top_products"])
-        
-        return jsonify([])
-        
-    except Exception as e:
-        logger.error(f"Failed to load results view: {e}")
-        return jsonify({"error": str(e)}), 500
+    
+    # Fallback to cached results
+    if cached_results and cached_results.get("top_products"):
+        return jsonify(cached_results["top_products"])
+    
+    # No results available
+    return jsonify([])
 
 @app.route('/api/categories')
 def get_categories():
@@ -249,131 +199,42 @@ def run_pipeline_background(config_data):
         # Create dynamic config based on user input
         dynamic_config = create_dynamic_config(config_data)
         
+        # Initialize pipeline with config.yaml (same as terminal)
         pipeline = WinningProductPipeline("config.yaml")
         
         # Apply dynamic configuration
         apply_dynamic_config(pipeline, dynamic_config)
         
-        # Step 1: Market data collection (conditional)
-        if config_data.get("sources", {}).get("ebay", True) and pipeline.ebay_etl and pipeline.ebay_etl.get("enabled", False):
-            pipeline_status["current_step"] = "Collecting market data from eBay..."
-            pipeline_status["progress"] = 20
-            if not pipeline_status["running"]:
-                return
-            pipeline._collect_market_data()
-        elif config_data.get("sources", {}).get("ebay", True):
-            pipeline_status["current_step"] = "eBay ETL not available, skipping..."
-            pipeline_status["progress"] = 20
-            if not pipeline_status["running"]:
-                return
-            logger.warning("eBay ETL requested but not available, skipping market data collection")
+        # Use the SAME pipeline execution as terminal - call run_pipeline() directly
+        pipeline_status["current_step"] = "Running pipeline with real data collection..."
+        pipeline_status["progress"] = 20
         
-        # Step 2: Amazon data collection (conditional)
-        if config_data.get("sources", {}).get("amazon", False) and pipeline.keepa_etl:
-            pipeline_status["current_step"] = "Collecting Amazon data from Keepa..."
-            pipeline_status["progress"] = 30
-            if not pipeline_status["running"]:
-                return
-            pipeline._collect_amazon_data()
-        elif config_data.get("sources", {}).get("amazon", False):
-            pipeline_status["current_step"] = "Keepa ETL not available, skipping..."
-            pipeline_status["progress"] = 30
-            if not pipeline_status["running"]:
-                return
-            logger.warning("Amazon ETL requested but not available, skipping Amazon data collection")
-        
-        # Step 3: Trends data collection (conditional)
-        if config_data.get("sources", {}).get("trends", True):
-            pipeline_status["current_step"] = "Collecting Google Trends data..."
-            pipeline_status["progress"] = 40
-            if not pipeline_status["running"]:
-                return
-            pipeline._collect_trends_data()
-        
-        # Step 4: TikTok Shop data collection (conditional)
-        if config_data.get("sources", {}).get("tiktok", False) and pipeline.tiktok_shop_etl and pipeline.tiktok_shop_etl.get("enabled", False):
-            pipeline_status["current_step"] = "Collecting TikTok Shop data..."
-            pipeline_status["progress"] = 50
-            if not pipeline_status["running"]:
-                return
-            pipeline._collect_tiktok_shop_data()
-        elif config_data.get("sources", {}).get("tiktok", False):
-            pipeline_status["current_step"] = "TikTok Shop ETL not available, skipping..."
-            pipeline_status["progress"] = 50
-            if not pipeline_status["running"]:
-                return
-            logger.warning("TikTok Shop ETL requested but not available, skipping TikTok data collection")
-        
-        # Step 5: Supplier data collection (conditional)
-        if config_data.get("sources", {}).get("aliexpress", True) and pipeline.aliexpress_etl and pipeline.aliexpress_etl.get("enabled", False):
-            pipeline_status["current_step"] = "Collecting supplier data from AliExpress..."
-            pipeline_status["progress"] = 60
-            if not pipeline_status["running"]:
-                return
-            pipeline._collect_supplier_data()
-        elif config_data.get("sources", {}).get("aliexpress", True):
-            pipeline_status["current_step"] = "AliExpress ETL not available, skipping..."
-            pipeline_status["progress"] = 60
-            if not pipeline_status["running"]:
-                return
-            logger.warning("AliExpress ETL requested but not available, skipping supplier data collection")
-        
-        # Step 6: Product matching
-        pipeline_status["current_step"] = "Matching products..."
-        pipeline_status["progress"] = 75
         if not pipeline_status["running"]:
             return
-        pipeline._match_products()
-        
-        # Step 7: Scoring
-        pipeline_status["current_step"] = "Scoring and ranking products..."
-        pipeline_status["progress"] = 85
-        if not pipeline_status["running"]:
-            return
-        pipeline._score_products()
-        
-        # Step 7.5: ML Scoring (if model available)
-        pipeline_status["current_step"] = "Applying ML predictions..."
-        pipeline_status["progress"] = 87
-        if not pipeline_status["running"]:
-            return
-        
-        try:
-            from ml_scorer import ml_scorer
-            from data_aggregator import data_aggregator
             
-            # Add ML predictions to scored products
-            if pipeline.scoring_results and isinstance(pipeline.scoring_results, dict):
-                all_scored = pipeline.scoring_results.get("all_scored", [])
-                
-                for product in all_scored:
-                    # Get ML prediction
-                    ml_prob, ml_confidence = ml_scorer.predict_success(product)
-                    product['ml_prediction'] = ml_prob
-                    product['ml_confidence'] = ml_confidence.get('confidence', 0.0)
-                
-                # Add products to data aggregator for ML training
-                pipeline_run_id = f"pipeline_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                data_aggregator.add_products(all_scored, pipeline_run_id)
-                
-                logger.info(f"Added {len(all_scored)} products to ML training data")
-                
-        except Exception as e:
-            logger.warning(f"ML scoring failed: {e}")
-            # Continue without ML scoring
+        # This is the key fix - use the exact same method as terminal
+        result = pipeline.run_pipeline()
         
-        # Step 8: Reports
+        # Update progress
+        pipeline_status["progress"] = 90
+        
+        if not pipeline_status["running"]:
+            return
+            
+        # Generate reports
         pipeline_status["current_step"] = "Generating reports..."
         pipeline_status["progress"] = 95
-        if not pipeline_status["running"]:
-            return
         output_files = pipeline._generate_reports()
         
-        # Complete
-        if len(pipeline.supplier_products) == 0:
-            pipeline_status["current_step"] = "Pipeline completed with market data only (no suppliers available)"
+        # Complete with proper status
+        if result.success:
+            if len(pipeline.supplier_products) == 0:
+                pipeline_status["current_step"] = "Pipeline completed with market data only (no suppliers available)"
+            else:
+                pipeline_status["current_step"] = "Pipeline completed successfully!"
         else:
-            pipeline_status["current_step"] = "Pipeline completed successfully!"
+            pipeline_status["current_step"] = f"Pipeline completed with issues: {result.status}"
+        
         pipeline_status["progress"] = 100
         
         # Add results data to pipeline status for frontend display
@@ -392,7 +253,7 @@ def run_pipeline_background(config_data):
             }
         }
         
-        # Store results
+        # Store results - ONLY real data, no demo products
         cached_results = {
             "timestamp": datetime.now().isoformat(),
             "total_market_products": len(pipeline.market_products),
@@ -405,35 +266,39 @@ def run_pipeline_background(config_data):
             "market_products": []
         }
         
-        # Add market products for display when no scoring is available
+        # Add ONLY real market products (no demo data)
         for market_product in pipeline.market_products.values():
-            cached_results["market_products"].append({
-                "title": getattr(market_product, 'title', 'Unknown Product'),
-                "price": getattr(market_product, 'price', 0.0),
-                "image_url": getattr(market_product, 'image_url', ''),
-                "item_web_url": getattr(market_product, 'item_web_url', ''),
-                "seller_username": getattr(market_product, 'seller_username', ''),
-                "seller_feedback_score": getattr(market_product, 'seller_feedback_score', 0)
-            })
-        
-        # Add top products
-        if pipeline.scoring_results and isinstance(pipeline.scoring_results, dict):
-            winning_products = pipeline.scoring_results.get("winning_products", [])
-            for i, product in enumerate(winning_products[:10]):
-                cached_results["top_products"].append({
-                    "rank": i + 1,
-                    "title": product.get("title", "Unknown Product"),
-                    "final_score": product.get("score_overall", 0.0),
-                    "margin_score": product.get("margin_pct", 0.0),
-                    "demand_score": product.get("sales_velocity", 0.0),
-                    "trend_score": product.get("trend_growth_14d", 0.0),
-                    "is_winner": product.get("score_overall", 0.0) >= 0.65
+            # Only include products with real data
+            if hasattr(market_product, 'title') and getattr(market_product, 'title', '').strip():
+                cached_results["market_products"].append({
+                    "title": getattr(market_product, 'title', 'Unknown Product'),
+                    "price": getattr(market_product, 'price', 0.0),
+                    "image_url": getattr(market_product, 'image_url', ''),
+                    "item_web_url": getattr(market_product, 'item_web_url', ''),
+                    "seller_username": getattr(market_product, 'seller_username', ''),
+                    "seller_feedback_score": getattr(market_product, 'seller_feedback_score', 0)
                 })
+        
+        # Add ONLY real scored products (no demo data)
+        if pipeline.scoring_results and isinstance(pipeline.scoring_results, dict):
+            all_scored = pipeline.scoring_results.get("all_scored", [])
+            for i, product in enumerate(all_scored[:10]):
+                # Only include products with real scoring data
+                if isinstance(product, dict) and product.get("title") and product.get("title") != "Unknown Product":
+                    cached_results["top_products"].append({
+                        "rank": i + 1,
+                        "title": product.get("title", "Unknown Product"),
+                        "final_score": product.get("score_overall", 0.0),
+                        "margin_score": product.get("margin_pct", 0.0),
+                        "demand_score": product.get("sales_velocity", 0.0),
+                        "trend_score": product.get("trend_growth_14d", 0.0),
+                        "is_winner": product.get("score_overall", 0.0) >= 0.65
+                    })
         
         # Save results to file
         save_results(cached_results)
         
-        logger.info("Pipeline completed successfully")
+        logger.info("Pipeline completed successfully with real data")
         
     except Exception as e:
         pipeline_status["error"] = str(e)
@@ -610,69 +475,5 @@ def get_ml_model_info():
         logger.error(f"Failed to get ML model info: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/ml/data_stats')
-def get_ml_data_stats():
-    """Get ML data statistics"""
-    try:
-        from data_aggregator import data_aggregator
-        return jsonify(data_aggregator.get_product_stats())
-    except Exception as e:
-        logger.error(f"Failed to get ML data stats: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/ml/train', methods=['POST'])
-def train_ml_model():
-    """Trigger ML model training"""
-    try:
-        from ml_trainer import ml_trainer
-        from data_aggregator import data_aggregator
-        
-        # Get training data
-        training_data = data_aggregator.get_training_data()
-        
-        if training_data.empty:
-            return jsonify({"error": "No training data available"}), 400
-        
-        # Train model
-        training_results = ml_trainer.train_model(training_data)
-        
-        if training_results:
-            return jsonify({
-                "message": "Model training completed successfully",
-                "results": training_results
-            })
-        else:
-            return jsonify({"error": "Model training failed"}), 500
-            
-    except Exception as e:
-        logger.error(f"Failed to train ML model: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/ml/export')
-def export_ml_data():
-    """Export ML data for analysis"""
-    try:
-        format_type = request.args.get('format', 'csv')
-        from data_aggregator import data_aggregator
-        
-        filepath = data_aggregator.export_for_analysis(format_type)
-        
-        if filepath:
-            return jsonify({
-                "message": f"Data exported successfully to {filepath}",
-                "filepath": filepath
-            })
-        else:
-            return jsonify({"error": "Export failed"}), 500
-            
-    except Exception as e:
-        logger.error(f"Failed to export ML data: {e}")
-        return jsonify({"error": str(e)}), 500
-
 if __name__ == '__main__':
-    # Create necessary directories
-    os.makedirs('data/web', exist_ok=True)
-    os.makedirs('data/exports', exist_ok=True)
-    
-    # Run the app
     app.run(debug=True, host='0.0.0.0', port=5000)
