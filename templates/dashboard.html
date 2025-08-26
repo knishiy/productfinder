@@ -233,8 +233,11 @@
                          <div class="mb-3">
                              <label for="categoryInput" class="form-label">Product Category</label>
                              <input type="text" class="form-control" id="categoryInput" 
-                                    placeholder="e.g., Pet Supplies, Electronics, Home & Garden">
-                             <div class="form-text">Leave blank for general analysis</div>
+                                    placeholder="e.g., 177772 (Pet Supplies), 63514 (Cell Phone Accessories)">
+                             <div class="form-text">
+                                 <i class="fas fa-info-circle me-1"></i>
+                                 Enter eBay category ID (optional). Leave blank to use defaults: <strong>177772</strong> (Pet Supplies), <strong>63514</strong> (Cell Phone Accessories)
+                             </div>
                          </div>
                          
                          <div class="mb-3">
@@ -360,6 +363,30 @@
                      <div class="alert alert-info mt-3">
                          <i class="fas fa-info-circle me-2"></i>
                          <strong>Info:</strong> The pipeline will collect market data and trends. Supply matching is optional - enable AliExpress or Alibaba in "Supply Match With" to get scored results, or view raw market data when disabled.
+                     </div>
+                 </div>
+             </div>
+             
+             <!-- Current Configuration Display -->
+             <div id="currentConfig" class="mt-3" style="display: none;">
+                 <div class="alert alert-secondary">
+                     <h6 class="mb-2">
+                         <i class="fas fa-cog me-2"></i>
+                         Current Configuration
+                     </h6>
+                     <div class="row">
+                         <div class="col-md-6">
+                             <small class="text-muted">
+                                 <strong>Categories:</strong> <span id="configCategories">Default</span><br>
+                                 <strong>Keywords:</strong> <span id="configKeywords">Default</span>
+                             </small>
+                         </div>
+                         <div class="col-md-6">
+                             <small class="text-muted">
+                                 <strong>Max Results:</strong> <span id="configMaxResults">50</span><br>
+                                 <strong>Sources:</strong> <span id="configSources">eBay, Trends</span>
+                             </small>
+                         </div>
                      </div>
                  </div>
              </div>
@@ -636,6 +663,9 @@
                  if (config.productLink) {
                      addToLog(`Product link: ${config.productLink}`, 'info');
                  }
+                 
+                 // Update configuration display
+                 updateConfigurationDisplay(config);
 
                  const response = await fetch('/api/start_pipeline', {
                      method: 'POST',
@@ -1132,6 +1162,31 @@
             document.getElementById('pipelineLog').style.display = 'block';
         }
 
+        function updateConfigurationDisplay(config) {
+            const configDiv = document.getElementById('currentConfig');
+            const categoriesSpan = document.getElementById('configCategories');
+            const keywordsSpan = document.getElementById('configKeywords');
+            const maxResultsSpan = document.getElementById('configMaxResults');
+            const sourcesSpan = document.getElementById('configSources');
+            
+            // Update configuration display
+            categoriesSpan.textContent = config.category || 'Default (177772, 63514)';
+            keywordsSpan.textContent = config.keywords || 'Default (pet nail grinder, phone stand, cable organizer)';
+            maxResultsSpan.textContent = config.maxResults;
+            
+            // Build sources string
+            const enabledSources = [];
+            if (config.sources.ebay) enabledSources.push('eBay');
+            if (config.sources.trends) enabledSources.push('Trends');
+            if (config.sources.aliexpress) enabledSources.push('AliExpress');
+            if (config.sources.tiktok) enabledSources.push('TikTok');
+            if (config.sources.amazon) enabledSources.push('Amazon');
+            sourcesSpan.textContent = enabledSources.join(', ') || 'None';
+            
+            // Show configuration display
+            configDiv.style.display = 'block';
+        }
+        
         function updatePipelineStatus(status) {
             const statusContainer = document.getElementById('pipelineStatus');
             

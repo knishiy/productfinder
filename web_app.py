@@ -484,14 +484,26 @@ def apply_dynamic_config(pipeline, dynamic_config: Dict[str, Any]):
     """Apply dynamic configuration to pipeline"""
     try:
         # Update pipeline config with dynamic values
-        if "category" in dynamic_config:
-            pipeline.config["sources"]["ebay"]["categories"] = [dynamic_config["category"]]
+        if "category" in dynamic_config and dynamic_config["category"].strip():
+            # Validate category - if it's not a valid eBay category ID, use defaults
+            category = dynamic_config["category"].strip()
+            if category.isdigit() and len(category) >= 3:
+                # Valid numeric category ID
+                pipeline.config["sources"]["ebay"]["categories"] = [category]
+            else:
+                # Invalid category, use defaults from config
+                logger.warning(f"Invalid category '{category}' provided, using default categories")
+                pipeline.config["sources"]["ebay"]["categories"] = ["177772", "63514"]  # Pet Supplies, Cell Phone Accessories
         
-        if "keywords" in dynamic_config:
+        if "keywords" in dynamic_config and dynamic_config["keywords"]:
+            # Use provided keywords if they're not empty
             pipeline.config["sources"]["ebay"]["keywords"] = dynamic_config["keywords"]
             pipeline.config["sources"]["trends"]["keywords"] = dynamic_config["keywords"]
             pipeline.config["sources"]["aliexpress"]["keywords"] = dynamic_config["keywords"]
             pipeline.config["sources"]["tiktok"]["keywords"] = dynamic_config["keywords"]
+        else:
+            # Use default keywords if none provided
+            logger.info("No keywords provided, using default keywords from config")
         
         if "max_results" in dynamic_config:
             pipeline.config["sources"]["aliexpress"]["max_results"] = dynamic_config["max_results"]
