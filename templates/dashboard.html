@@ -232,12 +232,12 @@
                      <div class="col-md-6">
                          <div class="mb-3">
                              <label for="categoryInput" class="form-label">Product Category</label>
-                             <input type="text" class="form-control" id="categoryInput" 
-                                    placeholder="e.g., 177772 (Pet Supplies), 63514 (Cell Phone Accessories)">
-                             <div class="form-text">
-                                 <i class="fas fa-info-circle me-1"></i>
-                                 Enter eBay category ID (optional). Leave blank to use defaults: <strong>177772</strong> (Pet Supplies), <strong>63514</strong> (Cell Phone Accessories)
-                             </div>
+                                                             <input type="text" class="form-control" id="categoryInput" 
+                                       placeholder="e.g., 1281 (Pet Supplies), 15032 (Cell Phones)">
+                                                             <div class="form-text">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Enter eBay category ID (optional). Leave blank to use default categories from config.yaml
+                                </div>
                          </div>
                          
                          <div class="mb-3">
@@ -323,11 +323,13 @@
                          <div class="mb-3">
                              <label for="maxResultsInput" class="form-label">Max Results</label>
                              <select class="form-select" id="maxResultsInput">
+                                 <option value="">Not specified (use defaults)</option>
                                  <option value="20">20 products</option>
-                                 <option value="50" selected>50 products</option>
+                                 <option value="50">50 products</option>
                                  <option value="100">100 products</option>
                                  <option value="200">200 products</option>
                              </select>
+                             <div class="form-text">Leave blank to use default max results from config.yaml</div>
                          </div>
                          
                          <div class="mb-3" id="tiktokVideoLimitSection" style="display: none;">
@@ -362,7 +364,7 @@
                      <p>Configure your search above, then click "Start Pipeline" to begin product discovery.</p>
                      <div class="alert alert-info mt-3">
                          <i class="fas fa-info-circle me-2"></i>
-                         <strong>Info:</strong> The pipeline will collect market data and trends. Supply matching is optional - enable AliExpress or Alibaba in "Supply Match With" to get scored results, or view raw market data when disabled.
+                         <strong>Info:</strong> The pipeline will collect market data and trends using default settings from config.yaml. Supply matching is optional - enable AliExpress or Alibaba in "Supply Match With" to get scored results, or view raw market data when disabled.
                      </div>
                  </div>
              </div>
@@ -376,16 +378,16 @@
                      </h6>
                      <div class="row">
                          <div class="col-md-6">
-                             <small class="text-muted">
-                                 <strong>Categories:</strong> <span id="configCategories">Default</span><br>
-                                 <strong>Keywords:</strong> <span id="configKeywords">Default</span>
-                             </small>
+                                                           <small class="text-muted">
+                                  <strong>Categories:</strong> <span id="configCategories">Not specified</span><br>
+                                  <strong>Keywords:</strong> <span id="configKeywords">Not specified</span>
+                              </small>
                          </div>
                          <div class="col-md-6">
-                             <small class="text-muted">
-                                 <strong>Max Results:</strong> <span id="configMaxResults">50</span><br>
-                                 <strong>Sources:</strong> <span id="configSources">eBay, Trends</span>
-                             </small>
+                                                           <small class="text-muted">
+                                  <strong>Max Results:</strong> <span id="configMaxResults">Not specified</span><br>
+                                  <strong>Sources:</strong> <span id="configSources">eBay, Trends</span>
+                              </small>
                          </div>
                      </div>
                  </div>
@@ -656,7 +658,7 @@
                  }
 
                  // Log configuration
-                 addToLog(`Starting pipeline with: ${config.category || 'General'} category, ${config.maxResults} max results`, 'info');
+                 addToLog(`Starting pipeline with: ${config.category || 'General'} category, ${config.maxResults || 'default'} max results`, 'info');
                  if (config.keywords) {
                      addToLog(`Keywords: ${config.keywords}`, 'info');
                  }
@@ -1169,10 +1171,10 @@
             const maxResultsSpan = document.getElementById('configMaxResults');
             const sourcesSpan = document.getElementById('configSources');
             
-            // Update configuration display
-            categoriesSpan.textContent = config.category || 'Default (177772, 63514)';
-            keywordsSpan.textContent = config.keywords || 'Default (pet nail grinder, phone stand, cable organizer)';
-            maxResultsSpan.textContent = config.maxResults;
+            // Update configuration display - show "Not specified" when blank
+            categoriesSpan.textContent = config.category || 'Not specified';
+            keywordsSpan.textContent = config.keywords || 'Not specified';
+            maxResultsSpan.textContent = config.maxResults || 'Not specified';
             
             // Build sources string
             const enabledSources = [];

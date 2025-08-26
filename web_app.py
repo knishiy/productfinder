@@ -315,24 +315,25 @@ def create_dynamic_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
     """Create dynamic configuration based on user input"""
     dynamic_config = {}
     
-    # Handle category
-    if config_data.get("category"):
-        dynamic_config["category"] = config_data["category"]
+    # Handle category - only add if provided
+    if config_data.get("category") and config_data["category"].strip():
+        dynamic_config["category"] = config_data["category"].strip()
     
-    # Handle keywords
-    if config_data.get("keywords"):
+    # Handle keywords - only add if provided
+    if config_data.get("keywords") and config_data["keywords"].strip():
         keywords = [kw.strip() for kw in config_data["keywords"].split(",") if kw.strip()]
-        dynamic_config["keywords"] = keywords
+        if keywords:  # Only add if we have valid keywords
+            dynamic_config["keywords"] = keywords
     
-    # Handle product link
-    if config_data.get("productLink"):
-        dynamic_config["product_link"] = config_data["productLink"]
+    # Handle product link - only add if provided
+    if config_data.get("productLink") and config_data["productLink"].strip():
+        dynamic_config["product_link"] = config_data["productLink"].strip()
     
-    # Handle max results
-    if config_data.get("maxResults"):
-        dynamic_config["max_results"] = config_data["maxResults"]
+    # Handle max results - only add if provided
+    if config_data.get("maxResults") and config_data["maxResults"].strip():
+        dynamic_config["max_results"] = config_data["maxResults"].strip()
     
-    # Handle sources
+    # Handle sources - always include with defaults
     sources = config_data.get("sources", {})
     dynamic_config["sources"] = {
         "ebay": sources.get("ebay", True),
@@ -351,17 +352,20 @@ def create_dynamic_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
 def apply_dynamic_config(pipeline, dynamic_config: Dict[str, Any]):
     """Apply dynamic configuration to pipeline"""
     try:
-        # Update pipeline config with dynamic values
-        if "category" in dynamic_config and dynamic_config["category"].strip():
+        # Update pipeline config with dynamic values - only when provided
+        if "category" in dynamic_config and dynamic_config["category"]:
             # Validate category - if it's not a valid eBay category ID, use defaults
             category = dynamic_config["category"].strip()
             if category.isdigit() and len(category) >= 3:
                 # Valid numeric category ID
                 pipeline.config["sources"]["ebay"]["categories"] = [category]
+                logger.info(f"Applied custom category: {category}")
             else:
                 # Invalid category, use defaults from config
                 logger.warning(f"Invalid category '{category}' provided, using default categories")
-                pipeline.config["sources"]["ebay"]["categories"] = ["177772", "63514"]  # Pet Supplies, Cell Phone Accessories
+                pipeline.config["sources"]["ebay"]["categories"] = ["1281", "15032"]  # Pet Supplies (1281), Cell Phones (15032)
+        else:
+            logger.info("No custom category specified, using default categories from config")
         
         if "keywords" in dynamic_config and dynamic_config["keywords"]:
             # Use provided keywords if they're not empty
@@ -369,17 +373,22 @@ def apply_dynamic_config(pipeline, dynamic_config: Dict[str, Any]):
             pipeline.config["sources"]["trends"]["keywords"] = dynamic_config["keywords"]
             pipeline.config["sources"]["aliexpress"]["keywords"] = dynamic_config["keywords"]
             pipeline.config["sources"]["tiktok"]["keywords"] = dynamic_config["keywords"]
+            logger.info(f"Applied custom keywords: {dynamic_config['keywords']}")
         else:
             # Use default keywords if none provided
-            logger.info("No keywords provided, using default keywords from config")
+            logger.info("No custom keywords specified, using default keywords from config")
         
-        if "max_results" in dynamic_config:
+        if "max_results" in dynamic_config and dynamic_config["max_results"]:
             pipeline.config["sources"]["aliexpress"]["max_results"] = dynamic_config["max_results"]
             pipeline.config["sources"]["tiktok"]["max_results"] = dynamic_config["max_results"]
+            logger.info(f"Applied custom max results: {dynamic_config['max_results']}")
+        else:
+            logger.info("No custom max results specified, using defaults from config")
         
         # Handle TikTok video limit only if TikTok is enabled
         if "tiktok_video_limit" in dynamic_config and dynamic_config["sources"]["tiktok"]:
             pipeline.config["sources"]["tiktok"]["video_limit"] = dynamic_config["tiktok_video_limit"]
+            logger.info(f"Applied TikTok video limit: {dynamic_config['tiktok_video_limit']}")
         
         # Update source enablement
         for source, enabled in dynamic_config["sources"].items():

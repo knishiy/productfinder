@@ -14,7 +14,7 @@ scan:
 sources:
   ebay:
     enabled: true
-    categories: ["177772", "63514"]   # Pet Supplies, Cell Phone Accessories (examples)
+    categories: ["1281", "15032"]   # Pet Supplies (1281), Cell Phones (15032) - working category IDs
     keywords: ["pet nail grinder", "phone stand", "cable organizer"]
     limit: 200  # Cost-safe default from .env
   amazon:

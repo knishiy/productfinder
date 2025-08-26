@@ -99,6 +99,9 @@ class WinningProductPipeline:
         
         # Build optional clients based on config
         self._initialize_core_components()
+        
+        # Initialize ETL components
+        self._initialize_etl_components()
     
     def _initialize_core_components(self):
         """Initialize core components that are needed throughout the pipeline"""
