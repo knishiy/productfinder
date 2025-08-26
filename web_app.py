@@ -370,8 +370,8 @@ def run_pipeline_background(config_data):
         output_files = pipeline._generate_reports()
         
         # Complete
-        if len(supplier_pool) == 0:
-            pipeline_status["current_step"] = "Pipeline completed with demo data (no suppliers available)"
+        if len(pipeline.supplier_products) == 0:
+            pipeline_status["current_step"] = "Pipeline completed with market data only (no suppliers available)"
         else:
             pipeline_status["current_step"] = "Pipeline completed successfully!"
         pipeline_status["progress"] = 100
