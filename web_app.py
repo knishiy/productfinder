@@ -376,6 +376,22 @@ def run_pipeline_background(config_data):
             pipeline_status["current_step"] = "Pipeline completed successfully!"
         pipeline_status["progress"] = 100
         
+        # Add results data to pipeline status for frontend display
+        pipeline_status["results"] = {
+            "total_market_products": len(pipeline.market_products),
+            "total_supplier_products": len(pipeline.supplier_products),
+            "total_matches": len(pipeline.product_matches),
+            "winning_products": len(pipeline.scoring_results.get("winning_products", [])) if pipeline.scoring_results else 0,
+            "output_files": output_files,
+            "data_summary": {
+                "ebay_enabled": hasattr(pipeline, 'ebay_etl') and pipeline.ebay_etl and pipeline.ebay_etl.get("enabled", False),
+                "trends_enabled": hasattr(pipeline, 'trends') and pipeline.trends is not None,
+                "aliexpress_enabled": hasattr(pipeline, 'aliexpress_etl') and pipeline.aliexpress_etl and pipeline.aliexpress_etl.get("enabled", False),
+                "tiktok_enabled": hasattr(pipeline, 'tiktok_shop_etl') and pipeline.tiktok_shop_etl and pipeline.tiktok_shop_etl.get("enabled", False),
+                "amazon_enabled": hasattr(pipeline, 'amazon_etl') and pipeline.amazon_etl and pipeline.amazon_etl.get("enabled", False)
+            }
+        }
+        
         # Store results
         cached_results = {
             "timestamp": datetime.now().isoformat(),
