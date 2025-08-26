@@ -303,7 +303,6 @@ class WinningProductPipeline:
             
             # Guards before matching - ensure we have data
             market_items = list(self.market_products.values())
-            supplier_pool = list(self.supplier_products.values())
             
             if not market_items:
                 self.status = "no_market_data"
@@ -311,7 +310,7 @@ class WinningProductPipeline:
                 return PipelineResult(
                     execution_time=time.time() - start_time,
                     total_market_products=0,
-                    total_supplier_products=len(supplier_pool),
+                    total_supplier_products=len(self.supplier_products),
                     total_matches=0,
                     winning_products=0,
                     success=False,
@@ -319,9 +318,9 @@ class WinningProductPipeline:
                     output_files=[]
                 )
             
-            if not supplier_pool:
-                logger.warning("No supplier items collected; will create demo matches for testing")
-                # Don't stop the pipeline - continue with demo data
+            if not self.supplier_products:
+                logger.warning("No supplier items collected; supply matching will be skipped")
+                # Don't stop the pipeline - continue without supply matching
             
             if not self.matcher:
                 raise RuntimeError("ProductMatcher not initialized.")
