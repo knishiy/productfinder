@@ -75,7 +75,7 @@ class EbayETL:
             }
             data = {
                 "grant_type": "client_credentials",
-                "scope": "https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/buy.browse https://api.ebay.com/oauth/api_scope/buy.marketing"
+                "scope": "https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/buy.browse"
             }
             
             response = self.session.post(url, headers=headers, data=data)

@@ -240,20 +240,32 @@ def run_pipeline_background(config_data):
         apply_dynamic_config(pipeline, dynamic_config)
         
         # Step 1: Market data collection (conditional)
-        if config_data.get("sources", {}).get("ebay", True):
+        if config_data.get("sources", {}).get("ebay", True) and pipeline.ebay_etl and pipeline.ebay_etl.get("enabled", False):
             pipeline_status["current_step"] = "Collecting market data from eBay..."
             pipeline_status["progress"] = 20
             if not pipeline_status["running"]:
                 return
             pipeline._collect_market_data()
+        elif config_data.get("sources", {}).get("ebay", True):
+            pipeline_status["current_step"] = "eBay ETL not available, skipping..."
+            pipeline_status["progress"] = 20
+            if not pipeline_status["running"]:
+                return
+            logger.warning("eBay ETL requested but not available, skipping market data collection")
         
         # Step 2: Amazon data collection (conditional)
-        if config_data.get("sources", {}).get("amazon", False):
+        if config_data.get("sources", {}).get("amazon", False) and pipeline.keepa_etl:
             pipeline_status["current_step"] = "Collecting Amazon data from Keepa..."
             pipeline_status["progress"] = 30
             if not pipeline_status["running"]:
                 return
             pipeline._collect_amazon_data()
+        elif config_data.get("sources", {}).get("amazon", False):
+            pipeline_status["current_step"] = "Keepa ETL not available, skipping..."
+            pipeline_status["progress"] = 30
+            if not pipeline_status["running"]:
+                return
+            logger.warning("Amazon ETL requested but not available, skipping Amazon data collection")
         
         # Step 3: Trends data collection (conditional)
         if config_data.get("sources", {}).get("trends", True):
@@ -264,20 +276,32 @@ def run_pipeline_background(config_data):
             pipeline._collect_trends_data()
         
         # Step 4: TikTok Shop data collection (conditional)
-        if config_data.get("sources", {}).get("tiktok", False):
+        if config_data.get("sources", {}).get("tiktok", False) and pipeline.tiktok_shop_etl and pipeline.tiktok_shop_etl.get("enabled", False):
             pipeline_status["current_step"] = "Collecting TikTok Shop data..."
             pipeline_status["progress"] = 50
             if not pipeline_status["running"]:
                 return
             pipeline._collect_tiktok_shop_data()
+        elif config_data.get("sources", {}).get("tiktok", False):
+            pipeline_status["current_step"] = "TikTok Shop ETL not available, skipping..."
+            pipeline_status["progress"] = 50
+            if not pipeline_status["running"]:
+                return
+            logger.warning("TikTok Shop ETL requested but not available, skipping TikTok data collection")
         
         # Step 5: Supplier data collection (conditional)
-        if config_data.get("sources", {}).get("aliexpress", True):
+        if config_data.get("sources", {}).get("aliexpress", True) and pipeline.aliexpress_etl and pipeline.aliexpress_etl.get("enabled", False):
             pipeline_status["current_step"] = "Collecting supplier data from AliExpress..."
             pipeline_status["progress"] = 60
             if not pipeline_status["running"]:
                 return
             pipeline._collect_supplier_data()
+        elif config_data.get("sources", {}).get("aliexpress", True):
+            pipeline_status["current_step"] = "AliExpress ETL not available, skipping..."
+            pipeline_status["progress"] = 60
+            if not pipeline_status["running"]:
+                return
+            logger.warning("AliExpress ETL requested but not available, skipping supplier data collection")
         
         # Step 6: Product matching
         pipeline_status["current_step"] = "Matching products..."

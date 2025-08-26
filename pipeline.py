@@ -417,16 +417,7 @@ class WinningProductPipeline:
             # Collect data for each category
             for category_id in categories:
                 try:
-                    # Get best sellers for this category
-                    best_seller_items = best_sellers(self.ebay_etl["token"], category_id, limit=limit//2)
-                    
-                    # Normalize eBay results to ensure we always have lists
-                    if best_seller_items is None:
-                        best_seller_items = []
-                    elif isinstance(best_seller_items, dict):
-                        best_seller_items = best_seller_items.get("items", [])
-                    
-                    # Search for each keyword in this category
+                    # Search for each keyword in this category (this gives us trend data via item creation dates)
                     for keyword in keywords:
                         search_items_result = search_items(
                             self.ebay_etl["token"], 
@@ -442,7 +433,7 @@ class WinningProductPipeline:
                             search_items_result = search_items_result.get("items", [])
                         
                         # Store products
-                        for item in best_seller_items + search_items_result:
+                        for item in search_items_result:
                             if item.get("itemId"):
                                 # Create a simple product object
                                 product = type('Product', (), {
@@ -451,7 +442,7 @@ class WinningProductPipeline:
                                     'price': float(item.get("price", {}).get("value", 0)),
                                     'image_url': item.get("image", {}).get("imageUrl", ""),
                                     'category_id': category_id,
-                                    'is_best_seller': item in best_seller_items
+                                    'is_best_seller': False  # We'll determine this based on creation date and price
                                 })()
                                 
                                 self.market_products[product.item_id] = product
@@ -572,7 +563,11 @@ class WinningProductPipeline:
             keywords = dget(tiktok_config, "keywords", [])
             max_results = dget(tiktok_config, "max_results", 20)
             
-            logger.info(f"Collecting TikTok Shop data for {len(keywords)} keywords")
+            # Calculate limit per keyword to ensure total doesn't exceed max_results
+            total_limit = max_results
+            limit_per_keyword = max(1, total_limit // len(keywords)) if keywords else 1
+            
+            logger.info(f"Collecting TikTok Shop data for {len(keywords)} keywords (max {total_limit} total videos, {limit_per_keyword} per keyword)")
             
             # Check if TikTok Shop ETL is available
             if not dget(self.tiktok_shop_etl, "enabled", False):
@@ -580,19 +575,26 @@ class WinningProductPipeline:
                 return
             
             # Collect TikTok Shop data for each keyword
+            total_videos_collected = 0
             for keyword in keywords:
+                # Check if we've already reached the total limit
+                if total_videos_collected >= total_limit:
+                    logger.info(f"Reached total limit of {total_limit} videos, stopping collection")
+                    break
+                    
                 try:
                     # Search TikTok Shop using Apify
                     tiktok_products = search_tiktok_shop_apify(
                         keyword, 
                         token=os.environ.get("APIFY_TOKEN"),
-                        limit=max_results
+                        limit=limit_per_keyword
                     )
                     
                     # Store TikTok Shop data
                     if tiktok_products:
                         self.tiktok_shop_data[keyword] = tiktok_products
-                        logger.info(f"Found {len(tiktok_products)} TikTok Shop products for '{keyword}'")
+                        total_videos_collected += len(tiktok_products)
+                        logger.info(f"Found {len(tiktok_products)} TikTok Shop products for '{keyword}' (total: {total_videos_collected})")
                     
                     # Rate limiting
                     time.sleep(0.5)

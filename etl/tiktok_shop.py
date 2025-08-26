@@ -41,7 +41,7 @@ class TikTokShopProduct:
 class TikTokShopETL:
     """TikTok Shop ETL class for tracking product performance"""
     
-    def __init__(self, access_token: str = None, use_apify: bool = False, apify_token: str = None):
+    def __init__(self, access_token: str = None, use_apify: bool = False, apify_token: str = None, apify_actor: str = None):
         """
         Initialize TikTok Shop ETL
         
@@ -49,10 +49,12 @@ class TikTokShopETL:
             access_token: TikTok Shop API access token (if available)
             use_apify: Whether to use Apify as fallback
             apify_token: Apify API token
+            apify_actor: Apify actor to use (e.g., "clockworks/tiktok-scraper")
         """
         self.access_token = access_token
         self.use_apify = use_apify
         self.apify_token = apify_token
+        self.apify_actor = apify_actor or "clockworks/tiktok-scraper"
         
         # API endpoints
         self.base_url = "https://open.tiktokapis.com/v2"
@@ -95,7 +97,7 @@ class TikTokShopETL:
     def _search_apify_fallback(self, query: str, limit: int) -> List[TikTokShopProduct]:
         """Search using Apify TikTok Shop actor as fallback"""
         try:
-            url = f"{self.apify_url}/acts/pintostudio~tiktok-shop-search/run-sync-get-dataset-items?token={self.apify_token}"
+            url = f"{self.apify_url}/acts/{self.apify_actor}/run-sync-get-dataset-items?token={self.apify_token}"
             payload = {
                 "query": query,
                 "limit": limit,
@@ -228,7 +230,10 @@ def search_tiktok_shop_apify(query: str, token: str = None, limit: int = 20) -> 
         return []
     
     try:
-        url = f"https://api.apify.com/v2/acts/pintostudio~tiktok-shop-search/run-sync-get-dataset-items?token={token}"
+        # Use the correct actor from environment variable
+        import os
+        actor = os.environ.get("APIFY_TIKTOK_ACTOR", "clockworks~tiktok-scraper")
+        url = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items?token={token}"
         payload = {"query": query, "limit": limit, "country": "US"}
         
         response = requests.post(url, json=payload, timeout=60)

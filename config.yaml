@@ -26,13 +26,13 @@ sources:
     timeframe: "today 1-m"
     geo: "US"
   aliexpress:
-    enabled: true
-    provider: "apify"   # "official" later when you get Open Platform keys
+    enabled: false  # No API access yet - will need official Open Platform keys
+    provider: "official"  # "official" when you get Open Platform keys
     max_results: 20  # Cost-safe default from .env
   tiktok:
     enabled: true
     provider: "apify"   # "official" later when you get TikTok Shop API access
-    max_results: 20
+    max_results: 5  # Limited to 5 videos to save on Apify costs
     keywords: ["pet nail grinder", "phone stand", "cable organizer", "wireless earbuds"]
 
 # Matching configuration
