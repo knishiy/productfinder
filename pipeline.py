@@ -6,6 +6,7 @@ Orchestrates the entire product discovery and scoring process
 import logging
 import os
 import time
+import traceback
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 from dataclasses import dataclass
@@ -174,13 +175,15 @@ class WinningProductPipeline:
                 try:
                     token = get_token()  # This will use environment variables
                     self.ebay_etl = {"token": token, "enabled": True}
-                    logger.info("eBay ETL initialized successfully")
+                    logger.info("eBay ETL initialized successfully with token")
                 except Exception as e:
-                    logger.warning(f"eBay ETL initialization failed: {e}")
+                    logger.error(f"eBay ETL initialization failed: {e}")
+                    import traceback
+                    logger.error(f"Full error: {traceback.format_exc()}")
                     self.ebay_etl = {"enabled": False}
             else:
                 logger.info("eBay ETL disabled in configuration")
-                self.ebay_etl = {"enabled": False}
+                self.ebay_etl = None
             
             # Initialize AliExpress ETL
             aliexpress_config = dget(sources, "aliexpress", {})
@@ -281,18 +284,22 @@ class WinningProductPipeline:
             # Step 1: Collect market data (eBay)
             logger.info("Step 1: Collecting market data from eBay")
             self._collect_market_data()
+            logger.info(f"Market data collection completed. Products: {len(self.market_products)}")
             
             # Step 2: Collect trends data
             logger.info("Step 2: Collecting Google Trends data")
             self._collect_trends_data()
+            logger.info("Trends data collection completed")
             
             # Step 3: Collect TikTok Shop data
             logger.info("Step 3: Collecting TikTok Shop data")
             self._collect_tiktok_shop_data()
+            logger.info("TikTok Shop data collection completed")
             
-            # Step 3: Collect supplier data
-            logger.info("Step 3: Collecting supplier data from AliExpress")
+            # Step 4: Collect supplier data
+            logger.info("Step 4: Collecting supplier data from AliExpress")
             self._collect_supplier_data()
+            logger.info(f"Supplier data collection completed. Products: {len(self.supplier_products)}")
             
             # Guards before matching - ensure we have data
             market_items = list(self.market_products.values())
