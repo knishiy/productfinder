@@ -263,29 +263,67 @@ def run_pipeline_background(config_data):
                 return
             pipeline._collect_trends_data()
         
-        # Step 4: Supplier data collection (conditional)
+        # Step 4: TikTok Shop data collection (conditional)
+        if config_data.get("sources", {}).get("tiktok", False):
+            pipeline_status["current_step"] = "Collecting TikTok Shop data..."
+            pipeline_status["progress"] = 50
+            if not pipeline_status["running"]:
+                return
+            pipeline._collect_tiktok_shop_data()
+        
+        # Step 5: Supplier data collection (conditional)
         if config_data.get("sources", {}).get("aliexpress", True):
             pipeline_status["current_step"] = "Collecting supplier data from AliExpress..."
-            pipeline_status["progress"] = 50
+            pipeline_status["progress"] = 60
             if not pipeline_status["running"]:
                 return
             pipeline._collect_supplier_data()
         
-        # Step 5: Product matching
+        # Step 6: Product matching
         pipeline_status["current_step"] = "Matching products..."
-        pipeline_status["progress"] = 70
+        pipeline_status["progress"] = 75
         if not pipeline_status["running"]:
             return
         pipeline._match_products()
         
-        # Step 6: Scoring
+        # Step 7: Scoring
         pipeline_status["current_step"] = "Scoring and ranking products..."
-        pipeline_status["progress"] = 90
+        pipeline_status["progress"] = 85
         if not pipeline_status["running"]:
             return
         pipeline._score_products()
         
-        # Step 7: Reports
+        # Step 7.5: ML Scoring (if model available)
+        pipeline_status["current_step"] = "Applying ML predictions..."
+        pipeline_status["progress"] = 87
+        if not pipeline_status["running"]:
+            return
+        
+        try:
+            from ml_scorer import ml_scorer
+            from data_aggregator import data_aggregator
+            
+            # Add ML predictions to scored products
+            if pipeline.scoring_results and isinstance(pipeline.scoring_results, dict):
+                all_scored = pipeline.scoring_results.get("all_scored", [])
+                
+                for product in all_scored:
+                    # Get ML prediction
+                    ml_prob, ml_confidence = ml_scorer.predict_success(product)
+                    product['ml_prediction'] = ml_prob
+                    product['ml_confidence'] = ml_confidence.get('confidence', 0.0)
+                
+                # Add products to data aggregator for ML training
+                pipeline_run_id = f"pipeline_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                data_aggregator.add_products(all_scored, pipeline_run_id)
+                
+                logger.info(f"Added {len(all_scored)} products to ML training data")
+                
+        except Exception as e:
+            logger.warning(f"ML scoring failed: {e}")
+            # Continue without ML scoring
+        
+        # Step 8: Reports
         pipeline_status["current_step"] = "Generating reports..."
         pipeline_status["progress"] = 95
         if not pipeline_status["running"]:
@@ -362,8 +400,13 @@ def create_dynamic_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
         "ebay": sources.get("ebay", True),
         "trends": sources.get("trends", True),
         "aliexpress": sources.get("aliexpress", True),
+        "tiktok": sources.get("tiktok", False),
         "amazon": sources.get("amazon", False)
     }
+    
+    # Handle TikTok video limit
+    if config_data.get("tiktokVideoLimit"):
+        dynamic_config["tiktok_video_limit"] = config_data["tiktokVideoLimit"]
     
     return dynamic_config
 
@@ -378,9 +421,15 @@ def apply_dynamic_config(pipeline, dynamic_config: Dict[str, Any]):
             pipeline.config["sources"]["ebay"]["keywords"] = dynamic_config["keywords"]
             pipeline.config["sources"]["trends"]["keywords"] = dynamic_config["keywords"]
             pipeline.config["sources"]["aliexpress"]["keywords"] = dynamic_config["keywords"]
+            pipeline.config["sources"]["tiktok"]["keywords"] = dynamic_config["keywords"]
         
         if "max_results" in dynamic_config:
             pipeline.config["sources"]["aliexpress"]["max_results"] = dynamic_config["max_results"]
+            pipeline.config["sources"]["tiktok"]["max_results"] = dynamic_config["max_results"]
+        
+        # Handle TikTok video limit
+        if "tiktok_video_limit" in dynamic_config:
+            pipeline.config["sources"]["tiktok"]["video_limit"] = dynamic_config["tiktok_video_limit"]
         
         # Update source enablement
         for source, enabled in dynamic_config["sources"].items():
@@ -462,6 +511,81 @@ def health_check():
         "timestamp": datetime.now().isoformat(),
         "pipeline_running": pipeline_status["running"]
     })
+
+# ML Analysis endpoints
+@app.route('/ml_analysis')
+def ml_analysis_page():
+    """ML Analysis page"""
+    return render_template('ml_analysis.html')
+
+@app.route('/api/ml/model_info')
+def get_ml_model_info():
+    """Get ML model information"""
+    try:
+        from ml_scorer import ml_scorer
+        return jsonify(ml_scorer.get_model_info())
+    except Exception as e:
+        logger.error(f"Failed to get ML model info: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/ml/data_stats')
+def get_ml_data_stats():
+    """Get ML data statistics"""
+    try:
+        from data_aggregator import data_aggregator
+        return jsonify(data_aggregator.get_product_stats())
+    except Exception as e:
+        logger.error(f"Failed to get ML data stats: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/ml/train', methods=['POST'])
+def train_ml_model():
+    """Trigger ML model training"""
+    try:
+        from ml_trainer import ml_trainer
+        from data_aggregator import data_aggregator
+        
+        # Get training data
+        training_data = data_aggregator.get_training_data()
+        
+        if training_data.empty:
+            return jsonify({"error": "No training data available"}), 400
+        
+        # Train model
+        training_results = ml_trainer.train_model(training_data)
+        
+        if training_results:
+            return jsonify({
+                "message": "Model training completed successfully",
+                "results": training_results
+            })
+        else:
+            return jsonify({"error": "Model training failed"}), 500
+            
+    except Exception as e:
+        logger.error(f"Failed to train ML model: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/ml/export')
+def export_ml_data():
+    """Export ML data for analysis"""
+    try:
+        format_type = request.args.get('format', 'csv')
+        from data_aggregator import data_aggregator
+        
+        filepath = data_aggregator.export_for_analysis(format_type)
+        
+        if filepath:
+            return jsonify({
+                "message": f"Data exported successfully to {filepath}",
+                "filepath": filepath
+            })
+        else:
+            return jsonify({"error": "Export failed"}), 500
+            
+    except Exception as e:
+        logger.error(f"Failed to export ML data: {e}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     # Create necessary directories
