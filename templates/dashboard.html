@@ -297,14 +297,19 @@
                              </select>
                          </div>
                          
-                         <div class="mb-3">
-                             <label for="tiktokVideoLimitInput" class="form-label">TikTok Video Limit</label>
+                         <div class="mb-3" id="tiktokVideoLimitSection" style="display: none;">
+                             <label for="tiktokVideoLimitInput" class="form-label">
+                                 <i class="fab fa-tiktok me-2"></i>TikTok Video Limit
+                             </label>
                              <select class="form-select" id="tiktokVideoLimitInput">
                                  <option value="1">1 video per product</option>
                                  <option value="5" selected>5 videos per product</option>
                                  <option value="10">10 videos per product</option>
                              </select>
-                             <div class="form-text">Maximum videos to analyze per TikTok product</div>
+                             <div class="form-text">
+                                 <i class="fas fa-info-circle me-1"></i>
+                                 Maximum videos to analyze per TikTok product (only used when TikTok Shop Data is enabled)
+                             </div>
                          </div>
                      </div>
                  </div>
@@ -577,6 +582,16 @@
              document.getElementById('startPipelineBtn').addEventListener('click', startPipeline);
              document.getElementById('stopPipelineBtn').addEventListener('click', stopPipeline);
              document.getElementById('exportCsvBtn').addEventListener('click', exportCsv);
+             
+             // TikTok checkbox event listener
+             document.getElementById('tiktokSource').addEventListener('change', function() {
+                 const tiktokVideoLimitSection = document.getElementById('tiktokVideoLimitSection');
+                 if (this.checked) {
+                     tiktokVideoLimitSection.style.display = 'block';
+                 } else {
+                     tiktokVideoLimitSection.style.display = 'none';
+                 }
+             });
          }
 
                  async function startPipeline() {
@@ -593,9 +608,13 @@
                          tiktok: document.getElementById('tiktokSource').checked,
                          amazon: document.getElementById('amazonSource').checked
                      },
-                     maxResults: parseInt(document.getElementById('maxResultsInput').value),
-                     tiktokVideoLimit: parseInt(document.getElementById('tiktokVideoLimitInput').value)
+                     maxResults: parseInt(document.getElementById('maxResultsInput').value)
                  };
+                 
+                 // Only include TikTok video limit if TikTok is selected
+                 if (config.sources.tiktok) {
+                     config.tiktokVideoLimit = parseInt(document.getElementById('tiktokVideoLimitInput').value);
+                 }
 
                  // Validate that at least one source is selected
                  if (!Object.values(config.sources).some(enabled => enabled)) {

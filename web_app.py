@@ -404,8 +404,8 @@ def create_dynamic_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
         "amazon": sources.get("amazon", False)
     }
     
-    # Handle TikTok video limit
-    if config_data.get("tiktokVideoLimit"):
+    # Handle TikTok video limit only if TikTok is selected
+    if sources.get("tiktok", False) and config_data.get("tiktokVideoLimit"):
         dynamic_config["tiktok_video_limit"] = config_data["tiktokVideoLimit"]
     
     return dynamic_config
@@ -427,8 +427,8 @@ def apply_dynamic_config(pipeline, dynamic_config: Dict[str, Any]):
             pipeline.config["sources"]["aliexpress"]["max_results"] = dynamic_config["max_results"]
             pipeline.config["sources"]["tiktok"]["max_results"] = dynamic_config["max_results"]
         
-        # Handle TikTok video limit
-        if "tiktok_video_limit" in dynamic_config:
+        # Handle TikTok video limit only if TikTok is enabled
+        if "tiktok_video_limit" in dynamic_config and dynamic_config["sources"]["tiktok"]:
             pipeline.config["sources"]["tiktok"]["video_limit"] = dynamic_config["tiktok_video_limit"]
         
         # Update source enablement
