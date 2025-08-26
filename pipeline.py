@@ -612,10 +612,10 @@ class WinningProductPipeline:
     
     def _collect_supplier_data(self):
         """Collect supplier data from AliExpress using null-safe config access"""
-        # Check if AliExpress ETL is enabled
-        if not dget(self.aliexpress_etl, "enabled", False):
-            logger.warning("AliExpress ETL not enabled, skipping supplier data collection")
-            return
+                    # Check if AliExpress ETL is enabled
+            if not dget(self.aliexpress_etl, "enabled", False):
+                logger.warning("AliExpress ETL not enabled, skipping supplier data collection")
+                return
         
         try:
             self.current_step = "collecting_supplier_data"
@@ -676,6 +676,8 @@ class WinningProductPipeline:
             self.status = "error"
             self.error_message = str(e)
             raise
+    
+
     
     def _match_products(self):
         """Match market products with supplier products with explicit guards"""
