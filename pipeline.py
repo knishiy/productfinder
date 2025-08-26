@@ -17,9 +17,11 @@ from config_loader import load_config, dget, get_nested_config
 from etl.ebay import get_token, search_items, best_sellers
 from etl.trends import TrendsETL
 from etl.aliexpress import search_aliexpress_apify
+from etl.tiktok_shop import search_tiktok_shop_apify
 from matching import ProductMatcher
 from costing import CostCalculator
 from scoring import ProductScorer
+from risk_calculator import risk_calculator
 
 # Configure logging
 logging.basicConfig(
@@ -63,6 +65,7 @@ class WinningProductPipeline:
         self.keepa_etl = None
         self.trends_etl = None
         self.aliexpress_etl = None
+        self.tiktok_shop_etl = None
         
         # Initialize processing components
         self.matcher = None
@@ -75,6 +78,7 @@ class WinningProductPipeline:
         self.product_matches = {}
         self.scoring_results = {}
         self.trends_data = {}
+        self.tiktok_shop_data = {}
         
         # Pipeline status
         self.status = "idle"
@@ -191,9 +195,18 @@ class WinningProductPipeline:
                 logger.info("AliExpress ETL disabled in configuration")
                 self.aliexpress_etl = {"enabled": False}
             
-
-            
-
+            # Initialize TikTok Shop ETL
+            tiktok_config = dget(sources, "tiktok", {})
+            if dget(tiktok_config, "enabled", False):
+                try:
+                    self.tiktok_shop_etl = {"enabled": True, "provider": "apify"}
+                    logger.info("TikTok Shop ETL initialized (Apify provider)")
+                except Exception as e:
+                    logger.warning(f"TikTok Shop ETL initialization failed: {e}")
+                    self.tiktok_shop_etl = {"enabled": False}
+            else:
+                logger.info("TikTok Shop ETL disabled in configuration")
+                self.tiktok_shop_etl = {"enabled": False}
             
             logger.info("ETL components initialization completed")
             
@@ -272,6 +285,10 @@ class WinningProductPipeline:
             # Step 2: Collect trends data
             logger.info("Step 2: Collecting Google Trends data")
             self._collect_trends_data()
+            
+            # Step 3: Collect TikTok Shop data
+            logger.info("Step 3: Collecting TikTok Shop data")
+            self._collect_tiktok_shop_data()
             
             # Step 3: Collect supplier data
             logger.info("Step 3: Collecting supplier data from AliExpress")
@@ -539,6 +556,58 @@ class WinningProductPipeline:
             self.trends_data = {}
             # Don't fail the pipeline for trends data
     
+    def _collect_tiktok_shop_data(self):
+        """Collect TikTok Shop data using null-safe config access"""
+        try:
+            self.current_step = "collecting_tiktok_shop_data"
+            
+            # Use null-safe config access
+            sources_config = dget(self.config, "sources", {})
+            tiktok_config = dget(sources_config, "tiktok", {})
+            
+            if not dget(tiktok_config, "enabled", False):
+                logger.info("TikTok Shop collection disabled, skipping")
+                return
+            
+            keywords = dget(tiktok_config, "keywords", [])
+            max_results = dget(tiktok_config, "max_results", 20)
+            
+            logger.info(f"Collecting TikTok Shop data for {len(keywords)} keywords")
+            
+            # Check if TikTok Shop ETL is available
+            if not dget(self.tiktok_shop_etl, "enabled", False):
+                logger.warning("TikTok Shop ETL not initialized, skipping collection")
+                return
+            
+            # Collect TikTok Shop data for each keyword
+            for keyword in keywords:
+                try:
+                    # Search TikTok Shop using Apify
+                    tiktok_products = search_tiktok_shop_apify(
+                        keyword, 
+                        token=os.environ.get("APIFY_TOKEN"),
+                        limit=max_results
+                    )
+                    
+                    # Store TikTok Shop data
+                    if tiktok_products:
+                        self.tiktok_shop_data[keyword] = tiktok_products
+                        logger.info(f"Found {len(tiktok_products)} TikTok Shop products for '{keyword}'")
+                    
+                    # Rate limiting
+                    time.sleep(0.5)
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to collect TikTok Shop data for '{keyword}': {e}")
+                    continue
+            
+            logger.info(f"Collected TikTok Shop data for {len(self.tiktok_shop_data)} keywords")
+            
+        except Exception as e:
+            logger.error(f"Failed to collect TikTok Shop data: {e}")
+            self.tiktok_shop_data = {}
+            # Don't fail the pipeline for trends data
+    
     def _collect_supplier_data(self):
         """Collect supplier data from AliExpress using null-safe config access"""
         # Check if AliExpress ETL is enabled
@@ -726,10 +795,47 @@ class WinningProductPipeline:
             # Score products
             scored_results = self.scorer.score_all(features_list)
             
+            # Add risk calculation and success likelihood to each scored product
+            enhanced_results = []
+            for product in (scored_results or []):
+                try:
+                    # Calculate risk factors
+                    risk_data = risk_calculator.calculate_overall_risk(product)
+                    
+                    # Calculate success likelihood
+                    success_data = risk_calculator.calculate_success_likelihood(
+                        score=product.get("score_overall", 0.0),
+                        risk_percentage=risk_data["overall_risk"],
+                        margin_pct=product.get("margin_pct", 0.0),
+                        trend_growth=product.get("trend_growth_14d", 0.0)
+                    )
+                    
+                    # Add TikTok Shop data if available
+                    tiktok_data = self._get_tiktok_shop_data_for_product(product)
+                    
+                    # Enhance product with risk and success data
+                    enhanced_product = {
+                        **product,
+                        "risk_percentage": risk_data["overall_risk"],
+                        "risk_level": risk_data["risk_level"],
+                        "risk_breakdown": risk_data["risk_breakdown"],
+                        "success_likelihood": success_data["success_likelihood"],
+                        "success_level": success_data["success_level"],
+                        "success_factors": success_data["factors"],
+                        "tiktok_shop_data": tiktok_data,
+                        "analysis_date": datetime.now().isoformat()
+                    }
+                    
+                    enhanced_results.append(enhanced_product)
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to enhance product {product.get('match_id', 'unknown')}: {e}")
+                    enhanced_results.append(product)
+            
             # Create report structure that the report generator expects
             min_score = dget(self.config, "scan", {}).get("min_score", 0.65)
-            winners = [x for x in (scored_results or []) if x.get("score_overall", 0) >= min_score]
-            flagged = [x for x in (scored_results or []) if any([
+            winners = [x for x in enhanced_results if x.get("score_overall", 0) >= min_score]
+            flagged = [x for x in enhanced_results if any([
                 x.get("ip_brand_flag"), 
                 x.get("lead_time_days", 99) > 15
             ])]
@@ -737,11 +843,13 @@ class WinningProductPipeline:
             report_data = {
                 "winning_products": winners,
                 "flagged_products": flagged,
-                "all_scored": scored_results,
+                "all_scored": enhanced_results,
                 "summary": {
-                    "count_all": len(scored_results or []),
+                    "count_all": len(enhanced_results),
                     "count_winners": len(winners),
-                    "avg_score": (sum([p.get("score_overall", 0) for p in (scored_results or [])]) / max(len(scored_results or []), 1)),
+                    "avg_score": (sum([p.get("score_overall", 0) for p in enhanced_results]) / max(len(enhanced_results), 1)),
+                    "avg_risk": (sum([p.get("risk_percentage", 0) for p in enhanced_results]) / max(len(enhanced_results), 1)),
+                    "avg_success_likelihood": (sum([p.get("success_likelihood", 0) for p in enhanced_results]) / max(len(enhanced_results), 1))
                 },
             }
             
@@ -773,7 +881,12 @@ class WinningProductPipeline:
                             "lead_time_days": getattr(match, 'lead_time_days', 15.0),
                             "seller_rating": getattr(match, 'supplier_product', {}).get('seller_rating', 4.5),
                             "ip_brand_flag": getattr(match, 'ip_brand_flag', False),
-                            "saturation_cluster": getattr(match, 'saturation_cluster', 0)
+                            "saturation_cluster": getattr(match, 'saturation_cluster', 0),
+                            "landed_cost": getattr(match, 'landed_cost', 0.0),
+                            "title": getattr(match, 'market_product', {}).get('title', ''),
+                            "image_url": getattr(match, 'market_product', {}).get('image_url', ''),
+                            "market_url": getattr(match, 'market_product', {}).get('item_web_url', ''),
+                            "supplier_url": getattr(match, 'supplier_product', {}).get('url', '')
                         }
                         
                         features_list.append(features)
@@ -788,6 +901,44 @@ class WinningProductPipeline:
         except Exception as e:
             logger.error(f"Failed to build features from matches: {e}")
             return []
+    
+    def _get_tiktok_shop_data_for_product(self, product: Dict[str, Any]) -> Dict[str, Any]:
+        """Get TikTok Shop data for a specific product"""
+        try:
+            title = product.get("title", "").lower()
+            if not title or not self.tiktok_shop_data:
+                return {}
+            
+            # Find matching TikTok Shop products by title similarity
+            best_match = None
+            best_score = 0.0
+            
+            for keyword, tiktok_products in self.tiktok_shop_data.items():
+                for tiktok_product in tiktok_products:
+                    # Simple title similarity check
+                    if keyword.lower() in title or any(word in title for word in keyword.lower().split()):
+                        # Calculate a simple similarity score
+                        similarity = sum(1 for word in keyword.lower().split() if word in title) / len(keyword.lower().split())
+                        if similarity > best_score:
+                            best_score = similarity
+                            best_match = tiktok_product
+            
+            if best_match and best_score > 0.3:  # Minimum similarity threshold
+                return {
+                    "total_sold": best_match.get("total_sold", 0),
+                    "sales_timeframe_days": best_match.get("sales_timeframe_days", 30),
+                    "engagement_rate": best_match.get("engagement_rate", 0.0),
+                    "is_trending": best_match.get("is_trending", False),
+                    "shop_name": best_match.get("shop_name", ""),
+                    "shop_rating": best_match.get("shop_rating", 4.5),
+                    "similarity_score": round(best_score, 2)
+                }
+            
+            return {}
+            
+        except Exception as e:
+            logger.warning(f"Failed to get TikTok Shop data for product: {e}")
+            return {}
     
     def _export_scoring_results(self) -> Optional[str]:
         """Export scoring results to file"""

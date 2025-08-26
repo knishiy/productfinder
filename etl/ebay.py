@@ -13,6 +13,11 @@ import logging
 from dataclasses import dataclass
 from rapidfuzz import fuzz
 
+# eBay API URLs
+EBAY_OAUTH_URL = "https://api.ebay.com/identity/v1/oauth2/token"
+BROWSE_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search"
+MARKETING_URL = "https://api.ebay.com/buy/marketing/v1_beta/merchandised_product"
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

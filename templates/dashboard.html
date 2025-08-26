@@ -324,6 +324,46 @@
              </div>
          </div>
 
+        <!-- Metrics Explanation -->
+        <div class="results-card">
+            <h4 class="mb-3">
+                <i class="fas fa-calculator me-2"></i>
+                How Metrics Are Calculated
+            </h4>
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Risk Calculation (1-100%)</h6>
+                    <ul class="list-unstyled">
+                        <li><strong>Price Risk (35% weight):</strong> Higher landed cost = higher risk</li>
+                        <li><strong>Competition Risk (25% weight):</strong> More similar products = higher risk</li>
+                        <li><strong>Seller Risk (20% weight):</strong> Lower seller rating = higher risk</li>
+                        <li><strong>Lead Time Risk (15% weight):</strong> Longer delivery = higher risk</li>
+                        <li><strong>Trend Risk (5% weight):</strong> Declining trends = higher risk</li>
+                    </ul>
+                    <p class="text-muted small">Formula: Weighted average of all risk factors</p>
+                </div>
+                <div class="col-md-6">
+                    <h6>Success Likelihood (0-100%)</h6>
+                    <ul class="list-unstyled">
+                        <li><strong>Base Score:</strong> Product score from pipeline analysis</li>
+                        <li><strong>Risk Penalty:</strong> -40% max for high-risk products</li>
+                        <li><strong>Margin Bonus:</strong> +20% max for high-profit products</li>
+                        <li><strong>Trend Bonus/Penalty:</strong> ±15% based on growth trends</li>
+                    </ul>
+                    <p class="text-muted small">Formula: Base Score - Risk Penalty + Margin Bonus + Trend Bonus</p>
+                </div>
+            </div>
+            <div class="row mt-3">
+                <div class="col-12">
+                    <h6>TikTok Shop Integration</h6>
+                    <p class="text-muted small">
+                        Tracks product sales velocity, engagement rates, and trending status from TikTok Shop. 
+                        Shows total units sold within timeframe, engagement metrics, and viral indicators.
+                    </p>
+                </div>
+            </div>
+        </div>
+
         <!-- Statistics -->
         <div class="row" id="statsSection" style="display: none;">
             <div class="col-md-3">
@@ -386,6 +426,25 @@
                      </button>
                  </div>
              </div>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="sortSelect" class="form-label">Sort Results By:</label>
+                    <select class="form-select" id="sortSelect" onchange="sortResults()">
+                        <option value="score_desc">Score: Highest to Lowest</option>
+                        <option value="score_asc">Score: Lowest to Highest</option>
+                        <option value="risk_asc">Risk: Lowest to Highest</option>
+                        <option value="risk_desc">Risk: Highest to Lowest</option>
+                        <option value="success_desc">Success Likelihood: Highest to Lowest</option>
+                        <option value="success_asc">Success Likelihood: Lowest to Highest</option>
+                        <option value="margin_desc">Margin: Highest to Lowest</option>
+                        <option value="margin_asc">Margin: Lowest to Highest</option>
+                    </select>
+                </div>
+                <div class="col-md-6 text-end">
+                    <small class="text-muted">Showing <span id="resultsCount">0</span> products</span></small>
+                </div>
+            </div>
             
             <div id="productsTable">
                 <!-- Products will be loaded here -->
@@ -726,10 +785,11 @@
                                 <th>Rank</th>
                                 <th>Product</th>
                                 <th>Final Score</th>
-                                <th>Margin Score</th>
-                                <th>Demand Score</th>
-                                <th>Trend Score</th>
-                                <th>Status</th>
+                                <th>Risk Level</th>
+                                <th>Success Likelihood</th>
+                                <th>Margin %</th>
+                                <th>TikTok Shop</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -742,23 +802,31 @@
 
                 tableHTML += `
                     <tr class="product-row">
-                        <td><strong>#${product.rank}</strong></td>
+                        <td><strong>#${product.rank || 'N/A'}</strong></td>
                         <td>
-                            <div class="fw-bold">${product.title}</div>
+                            <div class="fw-bold">${product.title || 'N/A'}</div>
+                            <small class="text-muted">${product.match_id || ''}</small>
                         </td>
                         <td>
-                            <span class="score-badge bg-primary">${(product.final_score * 100).toFixed(1)}%</span>
+                            <span class="score-badge bg-primary">${(product.score_overall * 100).toFixed(1)}%</span>
                         </td>
                         <td>
-                            <span class="score-badge bg-info">${(product.margin_score * 100).toFixed(1)}%</span>
+                            <span class="risk-badge ${getRiskBadgeClass(product.risk_percentage)}">${product.risk_level || 'N/A'}</span>
+                            <br><small class="text-muted">${product.risk_percentage || 0}%</small>
                         </td>
                         <td>
-                            <span class="score-badge bg-warning">${(product.demand_score * 100).toFixed(1)}%</span>
+                            <span class="success-badge ${getSuccessBadgeClass(product.success_likelihood)}">${product.success_level || 'N/A'}</span>
+                            <br><small class="text-muted">${(product.success_likelihood || 0).toFixed(1)}%</small>
                         </td>
                         <td>
-                            <span class="score-badge bg-success">${(product.trend_score * 100).toFixed(1)}%</span>
+                            <span class="margin-badge bg-success">${(product.margin_pct * 100).toFixed(1)}%</span>
                         </td>
-                        <td>${winnerBadge}</td>
+                        <td>
+                            ${formatTikTokShopData(product.tiktok_shop_data)}
+                        </td>
+                        <td>
+                            ${formatActionButtons(product)}
+                        </td>
                     </tr>
                 `;
             });
@@ -770,6 +838,100 @@
             `;
 
             tableContainer.innerHTML = tableHTML;
+        }
+
+        // Helper functions for formatting data
+        function getRiskBadgeClass(riskPercentage) {
+            if (riskPercentage <= 25) return 'bg-success';
+            if (riskPercentage <= 50) return 'bg-warning';
+            if (riskPercentage <= 75) return 'bg-danger';
+            return 'bg-dark';
+        }
+
+        function getSuccessBadgeClass(successPercentage) {
+            if (successPercentage >= 80) return 'bg-success';
+            if (successPercentage >= 60) return 'bg-info';
+            if (successPercentage >= 40) return 'bg-warning';
+            if (successPercentage >= 20) return 'bg-danger';
+            return 'bg-secondary';
+        }
+
+        function formatTikTokShopData(tiktokData) {
+            if (!tiktokData || Object.keys(tiktokData).length === 0) {
+                return '<span class="text-muted">No data</span>';
+            }
+            
+            return `
+                <div class="tiktok-data">
+                    <div class="fw-bold">${tiktokData.total_sold || 0} sold</div>
+                    <small class="text-muted">${tiktokData.sales_timeframe_days || 30} days</small>
+                    ${tiktokData.is_trending ? '<br><span class="badge bg-danger">Trending</span>' : ''}
+                </div>
+            `;
+        }
+
+        function formatActionButtons(product) {
+            let buttons = '';
+            
+            if (product.market_url) {
+                buttons += `<a href="${product.market_url}" target="_blank" class="btn btn-sm btn-outline-primary me-1">Market</a>`;
+            }
+            
+            if (product.supplier_url) {
+                buttons += `<a href="${product.market_url}" target="_blank" class="btn btn-sm btn-outline-success">Supplier</a>`;
+            }
+            
+            if (product.tiktok_shop_data && product.tiktok_shop_data.shop_url) {
+                buttons += `<a href="${product.tiktok_shop_data.shop_url}" target="_blank" class="btn btn-sm btn-outline-danger">TikTok</a>`;
+            }
+            
+            return buttons || '<span class="text-muted">No links</span>';
+        }
+
+        function sortResults() {
+            if (!currentResults || !currentResults.all_scored) return;
+            
+            const sortBy = document.getElementById('sortSelect').value;
+            let sortedProducts = [...currentResults.all_scored];
+            
+            switch (sortBy) {
+                case 'score_desc':
+                    sortedProducts.sort((a, b) => (b.score_overall || 0) - (a.score_overall || 0));
+                    break;
+                case 'score_asc':
+                    sortedProducts.sort((a, b) => (a.score_overall || 0) - (b.score_overall || 0));
+                    break;
+                case 'risk_asc':
+                    sortedProducts.sort((a, b) => (a.risk_percentage || 0) - (b.risk_percentage || 0));
+                    break;
+                case 'risk_desc':
+                    sortedProducts.sort((a, b) => (b.risk_percentage || 0) - (a.risk_percentage || 0));
+                    break;
+                case 'success_desc':
+                    sortedProducts.sort((a, b) => (b.success_likelihood || 0) - (a.success_likelihood || 0));
+                    break;
+                case 'success_asc':
+                    sortedProducts.sort((a, b) => (a.success_likelihood || 0) - (b.success_likelihood || 0));
+                    break;
+                case 'margin_desc':
+                    sortedProducts.sort((a, b) => (b.margin_pct || 0) - (a.margin_pct || 0));
+                    break;
+                case 'margin_asc':
+                    sortedProducts.sort((a, b) => (a.margin_pct || 0) - (b.margin_pct || 0));
+                    break;
+            }
+            
+            // Add rank numbers
+            sortedProducts.forEach((product, index) => {
+                product.rank = index + 1;
+            });
+            
+            displayProductsTable(sortedProducts);
+            updateResultsCount(sortedProducts.length);
+        }
+
+        function updateResultsCount(count) {
+            document.getElementById('resultsCount').textContent = count;
         }
 
         function createCharts(results) {

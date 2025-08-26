@@ -16,7 +16,7 @@ sources:
     enabled: true
     categories: ["177772", "63514"]   # Pet Supplies, Cell Phone Accessories (examples)
     keywords: ["pet nail grinder", "phone stand", "cable organizer"]
-    limit: 120
+    limit: 200  # Cost-safe default from .env
   amazon:
     enabled: false   # turn on later after Keepa/PA-API
   trends:
@@ -28,7 +28,12 @@ sources:
   aliexpress:
     enabled: true
     provider: "apify"   # "official" later when you get Open Platform keys
+    max_results: 20  # Cost-safe default from .env
+  tiktok:
+    enabled: true
+    provider: "apify"   # "official" later when you get TikTok Shop API access
     max_results: 20
+    keywords: ["pet nail grinder", "phone stand", "cable organizer", "wireless earbuds"]
 
 # Matching configuration
 matching:
