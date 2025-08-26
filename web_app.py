@@ -35,6 +35,7 @@ cached_results = None
 pipeline_thread = None
 
 @app.route('/')
+@app.route('/dashboard')
 def dashboard():
     """Main dashboard page"""
     return render_template('dashboard.html')
@@ -233,7 +234,9 @@ def run_pipeline_background(config_data):
             else:
                 pipeline_status["current_step"] = "Pipeline completed successfully!"
         else:
-            pipeline_status["current_step"] = f"Pipeline completed with issues: {result.status}"
+            # PipelineResult doesn't have status attribute, use errors instead
+            error_msg = "; ".join(result.errors) if result.errors else "Unknown error"
+            pipeline_status["current_step"] = f"Pipeline completed with issues: {error_msg}"
         
         pipeline_status["progress"] = 100
         
