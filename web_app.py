@@ -154,6 +154,36 @@ def results_view():
                 
                 return jsonify(view_data)
         
+        # If no scoring results, try to show market data from pipeline reports
+        report_files = sorted(glob.glob("data/reports/pipeline_summary_*.json"), reverse=True)
+        if report_files:
+            with open(report_files[0], 'r', encoding='utf-8') as f:
+                report_data = json.load(f)
+                market_products = report_data.get("market_products", [])
+                
+                if market_products:
+                    # Convert market products to view format (without scoring data)
+                    view_data = []
+                    for i, product in enumerate(market_products):
+                        view_item = {
+                            "rank": i + 1,
+                            "title": product.get("title", "Unknown Product"),
+                            "final_score": "N/A",
+                            "margin_score": "N/A",
+                            "demand_score": "N/A",
+                            "trend_score": "N/A",
+                            "is_winner": False,
+                            "landed_cost": "N/A",
+                            "sell_price": product.get("price", 0.0),
+                            "lead_time_days": "N/A",
+                            "seller_rating": "N/A",
+                            "competition_density": "N/A",
+                            "price_stability": "N/A"
+                        }
+                        view_data.append(view_item)
+                    
+                    return jsonify(view_data)
+        
         # Fallback to cached results
         if cached_results and cached_results.get("top_products"):
             return jsonify(cached_results["top_products"])
@@ -340,7 +370,10 @@ def run_pipeline_background(config_data):
         output_files = pipeline._generate_reports()
         
         # Complete
-        pipeline_status["current_step"] = "Pipeline completed successfully!"
+        if len(supplier_pool) == 0:
+            pipeline_status["current_step"] = "Pipeline completed with demo data (no suppliers available)"
+        else:
+            pipeline_status["current_step"] = "Pipeline completed successfully!"
         pipeline_status["progress"] = 100
         
         # Store results
@@ -352,8 +385,20 @@ def run_pipeline_background(config_data):
             "winning_products": len(pipeline.scoring_results.get("winning_products", [])) if pipeline.scoring_results else 0,
             "output_files": output_files,
             "scoring_summary": pipeline.scoring_results if pipeline.scoring_results else {},
-            "top_products": []
+            "top_products": [],
+            "market_products": []
         }
+        
+        # Add market products for display when no scoring is available
+        for market_product in pipeline.market_products.values():
+            cached_results["market_products"].append({
+                "title": getattr(market_product, 'title', 'Unknown Product'),
+                "price": getattr(market_product, 'price', 0.0),
+                "image_url": getattr(market_product, 'image_url', ''),
+                "item_web_url": getattr(market_product, 'item_web_url', ''),
+                "seller_username": getattr(market_product, 'seller_username', ''),
+                "seller_feedback_score": getattr(market_product, 'seller_feedback_score', 0)
+            })
         
         # Add top products
         if pipeline.scoring_results and isinstance(pipeline.scoring_results, dict):

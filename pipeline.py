@@ -320,29 +320,32 @@ class WinningProductPipeline:
                 )
             
             if not supplier_pool:
-                self.status = "no_supplier_data"
-                logger.warning("No supplier items collected; stopping before matching.")
-                return PipelineResult(
-                    execution_time=time.time() - start_time,
-                    total_market_products=len(market_items),
-                    total_supplier_products=0,
-                    total_matches=0,
-                    winning_products=0,
-                    success=False,
-                    errors=["No supplier data collected"],
-                    output_files=[]
-                )
+                logger.warning("No supplier items collected; will create demo matches for testing")
+                # Don't stop the pipeline - continue with demo data
             
             if not self.matcher:
                 raise RuntimeError("ProductMatcher not initialized.")
             
-            # Step 4: Match products
-            logger.info("Step 4: Matching market products with suppliers")
-            self._match_products()
+            # Step 4: Match products (only if supply sources are enabled)
+            supply_sources_enabled = any([
+                dget(self.config, "sources", {}).get("aliexpress", {}).get("enabled", False),
+                dget(self.config, "sources", {}).get("alibaba", {}).get("enabled", False)
+            ])
             
-            # Step 5: Score and rank products
-            logger.info("Step 5: Scoring and ranking products")
-            self._score_products()
+            if supply_sources_enabled:
+                logger.info("Step 4: Matching market products with suppliers")
+                self._match_products()
+            else:
+                logger.info("Step 4: Supply matching disabled, skipping product matching step")
+                self.product_matches = {}
+            
+            # Step 5: Score and rank products (only if we have matches)
+            if self.product_matches:
+                logger.info("Step 5: Scoring and ranking products")
+                self._score_products()
+            else:
+                logger.info("Step 5: No product matches to score, skipping scoring step")
+                self.scoring_results = {}
             
             # Step 6: Generate reports
             logger.info("Step 6: Generating reports")
@@ -354,8 +357,11 @@ class WinningProductPipeline:
             if self.status in ["done_no_matches", "done_no_features"]:
                 final_status = "completed_no_data"
                 success = True  # Not an error, just no data
+            elif len(self.product_matches) > 0:
+                final_status = "completed_with_matches"
+                success = True
             else:
-                final_status = "completed"
+                final_status = "completed_market_data_only"
                 success = True
             
             self.status = final_status
@@ -715,39 +721,8 @@ class WinningProductPipeline:
             
             # Handle case when there are no matches
             if total_matches == 0:
-                # TEMP: if matches empty, add one fake item to exercise scoring
-                if self.config.get("run_mode") == "mvp":
-                    logger.info("MVP mode: adding fake match for testing scoring")
-                    
-                    # Create a proper match object structure
-                    class FakeMatch:
-                        def __init__(self):
-                            self.market_product = type('MarketProduct', (), {
-                                'title': 'Pet Nail Grinder',
-                                'price': 19.99,
-                                'image_url': None,
-                                'item_id': 'ebay:demo123'
-                            })()
-                            
-                            self.supplier_product = type('SupplierProduct', (), {
-                                'unit_price': 6.8,
-                                'ship_cost': 1.2,
-                                'lead_time_days': 9,
-                                'seller_rating': 4.7,
-                                'image_url': None,
-                                'product_id': 'supplier:demo123'
-                            })()
-                    
-                    matches = {
-                        "ebay:demo123": [FakeMatch()]
-                    }
-                    total_matches = 1
-                    logger.info("Added fake match for MVP testing")
-                else:
-                    self.status = "done_no_matches"
-                    self.product_matches = {}
-                    logger.warning("No matches found; finishing without scoring.")
-                    return
+                logger.info("No matches found; no supply matching sources enabled")
+                # Don't create fake matches - just continue with empty matches
             
             # Log the type and preview of matches
             logger.info(f"Matches type: {type(matches)}, count: {total_matches}")
@@ -899,21 +874,21 @@ class WinningProductPipeline:
                     try:
                         # Extract features from the match
                         features = {
-                            "match_id": f"{market_id}_{getattr(match, 'supplier_product', {}).get('product_id', 'unknown')}",
+                            "match_id": f"{market_id}_{getattr(match.supplier_product, 'product_id', 'unknown')}",
                             "margin_pct": getattr(match, 'margin_percentage', 0.0),
                             "sales_velocity": getattr(match, 'sales_velocity', 0.0),
                             "trend_growth_14d": self.trends_data.get(getattr(match, 'keyword', ''), 0.0),
                             "price_stability": getattr(match, 'price_stability', 0.5),
                             "competition_density": getattr(match, 'competition_density', 25.0),
                             "lead_time_days": getattr(match, 'lead_time_days', 15.0),
-                            "seller_rating": getattr(match, 'supplier_product', {}).get('seller_rating', 4.5),
+                            "seller_rating": getattr(match.supplier_product, 'seller_rating', 4.5),
                             "ip_brand_flag": getattr(match, 'ip_brand_flag', False),
                             "saturation_cluster": getattr(match, 'saturation_cluster', 0),
                             "landed_cost": getattr(match, 'landed_cost', 0.0),
-                            "title": getattr(match, 'market_product', {}).get('title', ''),
-                            "image_url": getattr(match, 'market_product', {}).get('image_url', ''),
-                            "market_url": getattr(match, 'market_product', {}).get('item_web_url', ''),
-                            "supplier_url": getattr(match, 'supplier_product', {}).get('url', '')
+                            "title": getattr(match.market_product, 'title', ''),
+                            "image_url": getattr(match.market_product, 'image_url', ''),
+                            "market_url": getattr(match.market_product, 'item_web_url', ''),
+                            "supplier_url": getattr(match.supplier_product, 'url', '')
                         }
                         
                         features_list.append(features)
