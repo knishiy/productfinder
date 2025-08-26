@@ -152,28 +152,13 @@ def results_view():
                     }
                     view_data.append(view_item)
                 
-                return jsonify({
-                    "all_scored": view_data,
-                    "winners": [item for item in view_data if item["is_winner"]],
-                    "total_count": len(view_data),
-                    "winners_count": len([item for item in view_data if item["is_winner"]])
-                })
+                return jsonify(view_data)
         
         # Fallback to cached results
         if cached_results and cached_results.get("top_products"):
-            return jsonify({
-                "all_scored": cached_results["top_products"],
-                "winners": [item for item in cached_results["top_products"] if item.get("is_winner", False)],
-                "total_count": len(cached_results["top_products"]),
-                "winners_count": len([item for item in cached_results["top_products"] if item.get("is_winner", False)])
-            })
+            return jsonify(cached_results["top_products"])
         
-        return jsonify({
-            "all_scored": [],
-            "winners": [],
-            "total_count": 0,
-            "winners_count": 0
-        })
+        return jsonify([])
         
     except Exception as e:
         logger.error(f"Failed to load results view: {e}")

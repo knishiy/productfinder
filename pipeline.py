@@ -711,12 +711,28 @@ class WinningProductPipeline:
                 # TEMP: if matches empty, add one fake item to exercise scoring
                 if self.config.get("run_mode") == "mvp":
                     logger.info("MVP mode: adding fake match for testing scoring")
+                    
+                    # Create a proper match object structure
+                    class FakeMatch:
+                        def __init__(self):
+                            self.market_product = type('MarketProduct', (), {
+                                'title': 'Pet Nail Grinder',
+                                'price': 19.99,
+                                'image_url': None,
+                                'item_id': 'ebay:demo123'
+                            })()
+                            
+                            self.supplier_product = type('SupplierProduct', (), {
+                                'unit_price': 6.8,
+                                'ship_cost': 1.2,
+                                'lead_time_days': 9,
+                                'seller_rating': 4.7,
+                                'image_url': None,
+                                'product_id': 'supplier:demo123'
+                            })()
+                    
                     matches = {
-                        "ebay:demo123": [{
-                            "market": {"title": "pet nail grinder", "price_now": 19.99, "image_url": None},
-                            "supplier": {"unit_price": 6.8, "ship_cost": 1.2, "lead_time_days": 9, "seller_rating": 4.7, "image_url": None},
-                            "features": {"margin_pct": 0.59, "sales_velocity": 8, "trend_growth_14d": 0.31, "price_stability": 0.7, "competition_density": 24, "lead_time_days": 9}
-                        }]
+                        "ebay:demo123": [FakeMatch()]
                     }
                     total_matches = 1
                     logger.info("Added fake match for MVP testing")

@@ -380,6 +380,17 @@
                      <p class="mt-2 text-muted">Pipeline is running. This may take several minutes.</p>
                  </div>
              </div>
+             
+             <!-- Pipeline Log -->
+             <div id="pipelineLog" class="mt-4" style="display: none;">
+                 <h6 class="mb-2">
+                     <i class="fas fa-terminal me-2"></i>
+                     Pipeline Log
+                 </h6>
+                 <div id="logContent" class="bg-dark text-light p-3 rounded" style="max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 0.9em;">
+                     <div class="text-muted">Pipeline logs will appear here...</div>
+                 </div>
+             </div>
          </div>
 
         <!-- Metrics Explanation -->
@@ -422,48 +433,9 @@
             </div>
         </div>
 
-        <!-- Statistics -->
-        <div class="row" id="statsSection" style="display: none;">
-            <div class="col-md-6">
-                <div class="stat-card text-center">
-                    <div class="stat-icon text-primary">
-                        <i class="fas fa-shopping-bag"></i>
-                    </div>
-                    <div class="stat-number" id="totalMarketProducts">0</div>
-                    <div class="stat-label">Market Products</div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="stat-card text-center">
-                    <div class="stat-icon text-info">
-                        <i class="fas fa-truck"></i>
-                    </div>
-                    <div class="stat-number" id="totalSupplierProducts">0</div>
-                    <div class="stat-label">Supplier Products</div>
-                </div>
-            </div>
-        </div>
+
         
-        <div class="row" id="statsSection2" style="display: none;">
-            <div class="col-md-6">
-                <div class="stat-card text-center">
-                    <div class="stat-icon text-warning">
-                        <i class="fas fa-link"></i>
-                    </div>
-                    <div class="stat-number" id="totalMatches">0</div>
-                    <div class="stat-label">Product Matches</div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="stat-card text-center">
-                    <div class="stat-icon text-success">
-                        <i class="fas fa-trophy"></i>
-                    </div>
-                    <div class="stat-number" id="winningProducts">0</div>
-                    <div class="stat-label">Winning Products</div>
-                </div>
-            </div>
-        </div>
+
 
         <!-- Results -->
         <div class="results-card" id="resultsSection" style="display: none;">
@@ -766,6 +738,7 @@
                         showPipelineError(status.error);
                     } else {
                         showPipelineComplete();
+                        // Always try to load results, even if empty
                         loadResults();
                     }
                     
@@ -821,57 +794,74 @@
              addToLog(`Pipeline failed: ${error}`, 'error');
          }
 
-                 async function loadResults() {
-             try {
-                 const response = await fetch('/api/results_view');
-                 const results = await response.json();
+                         async function loadResults() {
+            try {
+                const response = await fetch('/api/results_view');
+                const results = await response.json();
 
-                 if (results && results.total_count > 0) {
-                     displayResults(results);
-                 }
-             } catch (error) {
-                 console.error('Error loading results:', error);
-             }
-         }
+                console.log('Loaded results:', results); // Debug log
+                
+                if (results && results.length > 0) {
+                    displayResults(results);
+                } else {
+                    // Show empty results message
+                    document.getElementById('resultsSection').style.display = 'block';
+                    document.getElementById('productsTable').innerHTML = `
+                        <div class="text-center text-muted py-5">
+                            <i class="fas fa-search fa-3x mb-3"></i>
+                            <h5>No Products Found</h5>
+                            <p>No products matched the criteria or supply matching is not available.</p>
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Tip:</strong> Enable AliExpress or Alibaba supply matching to generate results.
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading results:', error);
+                // Show error in results section
+                document.getElementById('resultsSection').style.display = 'block';
+                document.getElementById('productsTable').innerHTML = `
+                    <div class="text-center text-danger py-5">
+                        <i class="fas fa-exclamation-triangle fa-3x mb-3"></i>
+                        <h5>Error Loading Results</h5>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
 
-                 function displayResults(results) {
-             // Store results for toggling
-             currentResults = results;
-             
-             // Show sections
-             document.getElementById('statsSection').style.display = 'block';
-             document.getElementById('statsSection2').style.display = 'block';
-             document.getElementById('resultsSection').style.display = 'block';
-             document.getElementById('chartsSection').style.display = 'block';
+                         function displayResults(results) {
+            // Store results for toggling
+            currentResults = results;
+            
+            // Show results section
+            document.getElementById('resultsSection').style.display = 'block';
+            
+            // Display products table
+            displayProductsTable(results);
+            
+            // Update results count
+            document.getElementById('resultsCount').textContent = results.length;
+        }
 
-             // Update statistics
-             document.getElementById('totalMarketProducts').textContent = results.total_count;
-             document.getElementById('totalSupplierProducts').textContent = results.total_count;
-             document.getElementById('totalMatches').textContent = results.total_count;
-             document.getElementById('winningProducts').textContent = results.winners_count;
+                 function showAllProducts() {
+            if (currentResults) {
+                document.getElementById('showAllBtn').classList.add('active');
+                document.getElementById('showWinnersBtn').classList.remove('active');
+                displayProductsTable(currentResults);
+            }
+        }
 
-             // Display products table (default to all scored)
-             displayProductsTable(results.all_scored);
-
-             // Create charts
-             createCharts(results);
-         }
-
-         function showAllProducts() {
-             if (currentResults) {
-                 document.getElementById('showAllBtn').classList.add('active');
-                 document.getElementById('showWinnersBtn').classList.remove('active');
-                 displayProductsTable(currentResults.all_scored);
-             }
-         }
-
-         function showWinnersOnly() {
-             if (currentResults) {
-                 document.getElementById('showWinnersBtn').classList.add('active');
-                 document.getElementById('showAllBtn').classList.remove('active');
-                 displayProductsTable(currentResults.winners);
-             }
-         }
+        function showWinnersOnly() {
+            if (currentResults) {
+                document.getElementById('showWinnersBtn').classList.add('active');
+                document.getElementById('showAllBtn').classList.remove('active');
+                // For now, show all results since we don't have separate winners
+                displayProductsTable(currentResults);
+            }
+        }
 
         function displayProductsTable(products) {
             const tableContainer = document.getElementById('productsTable');
@@ -892,7 +882,7 @@
                                 <th>Risk Level</th>
                                 <th>Success Likelihood</th>
                                 <th>Margin %</th>
-                                <th>TikTok Shop</th>
+                                <th>Data Source</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -926,7 +916,7 @@
                             <span class="margin-badge bg-success">${(product.margin_pct * 100).toFixed(1)}%</span>
                         </td>
                         <td>
-                            ${formatTikTokShopData(product.tiktok_shop_data)}
+                            ${formatDataSource(product)}
                         </td>
                         <td>
                             ${formatActionButtons(product)}
@@ -960,18 +950,20 @@
             return 'bg-secondary';
         }
 
-        function formatTikTokShopData(tiktokData) {
-            if (!tiktokData || Object.keys(tiktokData).length === 0) {
-                return '<span class="text-muted">No data</span>';
+        function formatDataSource(product) {
+            const sources = [];
+            
+            if (product.ebay_data) sources.push('eBay');
+            if (product.trends_data) sources.push('Google Trends');
+            if (product.aliexpress_data) sources.push('AliExpress');
+            if (product.amazon_data) sources.push('Amazon');
+            if (product.tiktok_shop_data) sources.push('TikTok');
+            
+            if (sources.length === 0) {
+                return '<span class="text-muted">Unknown</span>';
             }
             
-            return `
-                <div class="tiktok-data">
-                    <div class="fw-bold">${tiktokData.total_sold || 0} sold</div>
-                    <small class="text-muted">${tiktokData.sales_timeframe_days || 30} days</small>
-                    ${tiktokData.is_trending ? '<br><span class="badge bg-danger">Trending</span>' : ''}
-                </div>
-            `;
+            return sources.map(source => `<span class="badge bg-info me-1">${source}</span>`).join('');
         }
 
         function formatActionButtons(product) {
@@ -1123,26 +1115,21 @@
         }
 
         function addToLog(message, type) {
-            const logContainer = document.getElementById('pipelineLog');
+            const logContainer = document.getElementById('logContent');
             const timestamp = new Date().toLocaleString();
             
             const logEntry = document.createElement('div');
-            logEntry.className = `alert alert-${type === 'success' ? 'success' : 'danger'} alert-sm mb-2`;
-            logEntry.innerHTML = `
-                <div class="d-flex justify-content-between align-items-center">
-                    <span><strong>${timestamp}</strong> - ${message}</span>
-                    <button type="button" class="btn-close btn-close-sm" onclick="this.parentElement.parentElement.remove()"></button>
-                </div>
-            `;
+            logEntry.className = `text-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'info'} mb-1`;
+            logEntry.innerHTML = `<strong>${timestamp}</strong> - ${message}`;
             
-            // Add to top of log
-            logContainer.insertBefore(logEntry, logContainer.firstChild);
+            // Add to log content
+            logContainer.appendChild(logEntry);
             
-            // Keep only last 10 entries
-            const entries = logContainer.querySelectorAll('.alert');
-            if (entries.length > 10) {
-                entries[entries.length - 1].remove();
-            }
+            // Auto-scroll to bottom
+            logContainer.scrollTop = logContainer.scrollHeight;
+            
+            // Show the log section
+            document.getElementById('pipelineLog').style.display = 'block';
         }
 
         function updatePipelineStatus(status) {
