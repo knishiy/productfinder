@@ -108,39 +108,43 @@ def results_view():
     if cached_results and cached_results.get("top_products"):
         return jsonify(cached_results["top_products"])
     
-    # If no scoring results, try to show market data from pipeline reports
+    # If no scoring results, try to show market data from cached results
+    if cached_results and cached_results.get("market_products"):
+        return jsonify(cached_results["market_products"])
+    
+    # If no cached results, try to show summary from pipeline reports
     report_files = sorted(glob.glob("data/reports/pipeline_summary_*.json"), reverse=True)
     if report_files:
         with open(report_files[0], 'r', encoding='utf-8') as f:
             report_data = json.load(f)
-            market_products = report_data.get("market_products", [])
+            pipeline_execution = report_data.get("pipeline_execution", {})
+            total_market_products = pipeline_execution.get("total_market_products", 0)
             
-            if market_products:
-                # Convert market products to view format (without scoring data)
-                view_data = []
-                for i, product in enumerate(market_products):
-                    view_item = {
-                        "rank": i + 1,
-                        "title": product.get("title", "Unknown Product"),
-                        "final_score": "N/A",
-                        "margin_score": "N/A",
-                        "demand_score": "N/A",
-                        "trend_score": "N/A",
-                        "is_winner": False,
-                        "landed_cost": "N/A",
-                        "sell_price": product.get("price", 0.0),
-                        "lead_time_days": "N/A",
-                        "seller_rating": "N/A",
-                        "competition_density": "N/A",
-                        "price_stability": "N/A"
+            if total_market_products > 0:
+                # Create a summary view since we don't have individual products
+                summary_data = [{
+                    "rank": 1,
+                    "title": f"Pipeline Results Summary",
+                    "final_score": "N/A",
+                    "margin_score": "N/A", 
+                    "demand_score": "N/A",
+                    "trend_score": "N/A",
+                    "is_winner": False,
+                    "landed_cost": "N/A",
+                    "sell_price": 0.0,
+                    "lead_time_days": "N/A",
+                    "seller_rating": "N/A",
+                    "competition_density": "N/A",
+                    "price_stability": "N/A",
+                    "summary_info": {
+                        "total_market_products": total_market_products,
+                        "total_supplier_products": pipeline_execution.get("total_supplier_products", 0),
+                        "total_matches": pipeline_execution.get("total_matches", 0),
+                        "winning_products": pipeline_execution.get("winning_products", 0),
+                        "trends_analyzed": report_data.get("trends_analyzed", [])
                     }
-                    view_data.append(view_item)
-                
-                return jsonify(view_data)
-    
-    # Fallback to cached results
-    if cached_results and cached_results.get("top_products"):
-        return jsonify(cached_results["top_products"])
+                }]
+                return jsonify(summary_data)
     
     # No results available
     return jsonify([])
@@ -482,6 +486,36 @@ def health_check():
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "pipeline_running": pipeline_status["running"]
+    })
+
+@app.route('/api/debug/results')
+def debug_results():
+    """Debug endpoint to see what results are available"""
+    global cached_results
+    
+    # Check cached results
+    cached_info = {
+        "cached_results_exists": cached_results is not None,
+        "total_market_products": cached_results.get("total_market_products", 0) if cached_results else 0,
+        "total_supplier_products": cached_results.get("total_supplier_products", 0) if cached_results else 0,
+        "market_products_count": len(cached_results.get("market_products", [])) if cached_results else 0,
+        "top_products_count": len(cached_results.get("top_products", [])) if cached_results else 0
+    }
+    
+    # Check pipeline reports
+    report_files = sorted(glob.glob("data/reports/pipeline_summary_*.json"), reverse=True)
+    latest_report = None
+    if report_files:
+        try:
+            with open(report_files[0], 'r', encoding='utf-8') as f:
+                latest_report = json.load(f)
+        except Exception as e:
+            latest_report = {"error": str(e)}
+    
+    return jsonify({
+        "cached_results": cached_info,
+        "latest_report": latest_report,
+        "pipeline_status": pipeline_status
     })
 
 # ML Analysis endpoints
