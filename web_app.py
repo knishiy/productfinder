@@ -379,8 +379,16 @@ def apply_dynamic_config(pipeline, dynamic_config: Dict[str, Any]):
             pipeline.config["sources"]["tiktok"]["keywords"] = dynamic_config["keywords"]
             logger.info(f"Applied custom keywords: {dynamic_config['keywords']}")
         else:
-            # Use default keywords if none provided
-            logger.info("No custom keywords specified, using default keywords from config")
+            # Use default keywords if none provided - EXPLICITLY set them
+            default_keywords = pipeline.config["sources"]["ebay"].get("keywords", [])
+            if default_keywords:
+                pipeline.config["sources"]["ebay"]["keywords"] = default_keywords
+                pipeline.config["sources"]["trends"]["keywords"] = default_keywords
+                pipeline.config["sources"]["aliexpress"]["keywords"] = default_keywords
+                pipeline.config["sources"]["tiktok"]["keywords"] = default_keywords
+                logger.info(f"Applied default keywords from config: {default_keywords}")
+            else:
+                logger.warning("No default keywords found in config, pipeline may not collect data")
         
         if "max_results" in dynamic_config and dynamic_config["max_results"]:
             max_results = str(dynamic_config["max_results"]).strip()
