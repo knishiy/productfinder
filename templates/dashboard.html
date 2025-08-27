@@ -323,13 +323,11 @@
                          <div class="mb-3">
                              <label for="maxResultsInput" class="form-label">Max Results</label>
                              <select class="form-select" id="maxResultsInput">
-                                 <option value="">Not specified (use defaults)</option>
                                  <option value="20">20 products</option>
-                                 <option value="50">50 products</option>
+                                 <option value="50" selected>50 products</option>
                                  <option value="100">100 products</option>
                                  <option value="200">200 products</option>
                              </select>
-                             <div class="form-text">Leave blank to use default max results from config.yaml</div>
                          </div>
                          
                          <div class="mb-3" id="tiktokVideoLimitSection" style="display: none;">
@@ -385,7 +383,7 @@
                          </div>
                          <div class="col-md-6">
                                                            <small class="text-muted">
-                                  <strong>Max Results:</strong> <span id="configMaxResults">Not specified</span><br>
+                                  <strong>Max Results:</strong> <span id="configMaxResults">50 (default)</span><br>
                                   <strong>Sources:</strong> <span id="configSources">eBay, Trends</span>
                               </small>
                          </div>
@@ -1174,7 +1172,7 @@
             // Update configuration display - show "Not specified" when blank
             categoriesSpan.textContent = config.category || 'Not specified';
             keywordsSpan.textContent = config.keywords || 'Not specified';
-            maxResultsSpan.textContent = config.maxResults || 'Not specified';
+            maxResultsSpan.textContent = config.maxResults || '50 (default)';
             
             // Build sources string
             const enabledSources = [];

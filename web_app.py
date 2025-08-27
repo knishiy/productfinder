@@ -315,23 +315,27 @@ def create_dynamic_config(config_data: Dict[str, Any]) -> Dict[str, Any]:
     """Create dynamic configuration based on user input"""
     dynamic_config = {}
     
-    # Handle category - only add if provided
-    if config_data.get("category") and config_data["category"].strip():
-        dynamic_config["category"] = config_data["category"].strip()
+    # Handle category - only add if provided and not empty
+    category = config_data.get("category")
+    if category and isinstance(category, str) and category.strip():
+        dynamic_config["category"] = category.strip()
     
-    # Handle keywords - only add if provided
-    if config_data.get("keywords") and config_data["keywords"].strip():
-        keywords = [kw.strip() for kw in config_data["keywords"].split(",") if kw.strip()]
-        if keywords:  # Only add if we have valid keywords
-            dynamic_config["keywords"] = keywords
+    # Handle keywords - only add if provided and not empty
+    keywords = config_data.get("keywords")
+    if keywords and isinstance(keywords, str) and keywords.strip():
+        keyword_list = [kw.strip() for kw in keywords.split(",") if kw.strip()]
+        if keyword_list:  # Only add if we have valid keywords
+            dynamic_config["keywords"] = keyword_list
     
-    # Handle product link - only add if provided
-    if config_data.get("productLink") and config_data["productLink"].strip():
-        dynamic_config["product_link"] = config_data["productLink"].strip()
+    # Handle product link - only add if provided and not empty
+    product_link = config_data.get("productLink")
+    if product_link and isinstance(product_link, str) and product_link.strip():
+        dynamic_config["product_link"] = product_link.strip()
     
-    # Handle max results - only add if provided
-    if config_data.get("maxResults") and config_data["maxResults"].strip():
-        dynamic_config["max_results"] = config_data["maxResults"].strip()
+    # Handle max results - only add if provided and not empty
+    max_results = config_data.get("maxResults")
+    if max_results and isinstance(max_results, str) and max_results.strip():
+        dynamic_config["max_results"] = max_results.strip()
     
     # Handle sources - always include with defaults
     sources = config_data.get("sources", {})
@@ -355,7 +359,7 @@ def apply_dynamic_config(pipeline, dynamic_config: Dict[str, Any]):
         # Update pipeline config with dynamic values - only when provided
         if "category" in dynamic_config and dynamic_config["category"]:
             # Validate category - if it's not a valid eBay category ID, use defaults
-            category = dynamic_config["category"].strip()
+            category = str(dynamic_config["category"]).strip()
             if category.isdigit() and len(category) >= 3:
                 # Valid numeric category ID
                 pipeline.config["sources"]["ebay"]["categories"] = [category]
@@ -379,9 +383,10 @@ def apply_dynamic_config(pipeline, dynamic_config: Dict[str, Any]):
             logger.info("No custom keywords specified, using default keywords from config")
         
         if "max_results" in dynamic_config and dynamic_config["max_results"]:
-            pipeline.config["sources"]["aliexpress"]["max_results"] = dynamic_config["max_results"]
-            pipeline.config["sources"]["tiktok"]["max_results"] = dynamic_config["max_results"]
-            logger.info(f"Applied custom max results: {dynamic_config['max_results']}")
+            max_results = str(dynamic_config["max_results"]).strip()
+            pipeline.config["sources"]["aliexpress"]["max_results"] = max_results
+            pipeline.config["sources"]["tiktok"]["max_results"] = max_results
+            logger.info(f"Applied custom max results: {max_results}")
         else:
             logger.info("No custom max results specified, using defaults from config")
         
