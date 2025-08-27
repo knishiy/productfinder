@@ -441,11 +441,13 @@ class WinningProductPipeline:
                             limit=limit//len(keywords)
                         )
                         
-                        # Normalize search results
+                        # Normalize search results - eBay ETL returns list directly
                         if search_items_result is None:
                             search_items_result = []
                         elif isinstance(search_items_result, dict):
-                            search_items_result = search_items_result.get("items", [])
+                            # Handle case where response might be wrapped in dict
+                            search_items_result = search_items_result.get("itemSummaries", [])
+                        # If it's already a list (from ETL), use it directly
                         
                         # Store products
                         for item in search_items_result:
@@ -654,11 +656,13 @@ class WinningProductPipeline:
                     # Search for suppliers using Apify
                     supplier_items = search_aliexpress_apify(search_query, page=1, token=os.environ.get("APIFY_TOKEN"))
                     
-                    # Normalize supplier items to ensure we always have a list
+                    # Normalize supplier items - Apify returns list directly
                     if supplier_items is None:  # network hiccup fallback
                         supplier_items = []
                     elif isinstance(supplier_items, dict):
+                        # Handle case where response might be wrapped in dict
                         supplier_items = supplier_items.get("items", [])
+                    # If it's already a list (from ETL), use it directly
                     
                     # Log the type and preview of supplier items
                     logger.info(f"Supplier items type: {type(supplier_items)}, length: {len(supplier_items) if supplier_items else 0}")
