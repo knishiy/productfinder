@@ -427,9 +427,9 @@ class WinningProductPipeline:
     
     def _collect_market_data(self):
         """Collect market data from eBay using null-safe config access"""
-        # Check if eBay ETL is enabled
-        if not dget(self.ebay_etl, "enabled", False):
-            logger.warning("eBay ETL not enabled, skipping market data collection")
+        # Check if eBay ETL is enabled and properly initialized
+        if not self.ebay_etl or not hasattr(self.ebay_etl, 'search_products'):
+            logger.warning("eBay ETL not enabled or not properly initialized, skipping market data collection")
             return
         
         try:
@@ -1026,6 +1026,11 @@ class WinningProductPipeline:
                 raw_data_file = self._export_raw_data()
                 if raw_data_file:
                     output_files.append(raw_data_file)
+                
+                # Export raw market products as JSON for web app display
+                market_json_file = self._export_market_products_json()
+                if market_json_file:
+                    output_files.append(market_json_file)
             
             # Export processed data
             if self.config.get("output", {}).get("save_processed_data", True):
@@ -1088,6 +1093,64 @@ class WinningProductPipeline:
             logger.error(f"Failed to export raw data: {e}")
         
         return None
+    
+    def _export_market_products_json(self) -> Optional[str]:
+        """Export market products as JSON for web app display"""
+        try:
+            if not self.market_products:
+                return None
+            
+            # Convert market products to serializable format
+            market_data = {}
+            for item_id, product in self.market_products.items():
+                market_data[item_id] = {
+                    "item_id": product.item_id,
+                    "title": product.title,
+                    "price": product.price,
+                    "currency": getattr(product, 'currency', 'USD'),
+                    "image_url": getattr(product, 'image_url', ''),
+                    "item_web_url": getattr(product, 'item_web_url', ''),
+                    "seller_username": getattr(product, 'seller_username', ''),
+                    "seller_feedback_score": getattr(product, 'seller_feedback_score', 0),
+                    "seller_positive_feedback_percent": getattr(product, 'seller_positive_feedback_percent', 0.0),
+                    "buying_options": getattr(product, 'buying_options', []),
+                    "condition": getattr(product, 'condition', ''),
+                    "category_id": getattr(product, 'category_id', ''),
+                    "category_name": getattr(product, 'category_name', ''),
+                    "location": getattr(product, 'location', ''),
+                    "shipping_cost": getattr(product, 'shipping_cost', 0.0),
+                    "shipping_type": getattr(product, 'shipping_type', ''),
+                    "top_rated_seller": getattr(product, 'top_rated_seller', False),
+                    "best_offer_enabled": getattr(product, 'best_offer_enabled', False),
+                    "listing_type": getattr(product, 'listing_type', ''),
+                    "end_time": getattr(product, 'end_time', ''),
+                    "is_best_seller": getattr(product, 'is_best_seller', False),
+                    "merchandised_rank": getattr(product, 'merchandised_rank')
+                }
+            
+            # Save to pipeline_runs directory
+            os.makedirs("data/pipeline_runs", exist_ok=True)
+            filename = f"data/pipeline_runs/market_products_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump({
+                    "timestamp": datetime.now().isoformat(),
+                    "pipeline_status": self.status,
+                    "market_products": market_data,
+                    "total_market_products": len(market_data),
+                    "trends_data": self.trends_data,
+                    "config": {
+                        "categories": self.config.get("sources", {}).get("ebay", {}).get("categories", []),
+                        "keywords": self.config.get("sources", {}).get("ebay", {}).get("keywords", [])
+                    }
+                }, f, indent=2, default=str)
+            
+            logger.info(f"Exported {len(market_data)} market products to {filename}")
+            return filename
+            
+        except Exception as e:
+            logger.error(f"Failed to export market products JSON: {e}")
+            return None
     
     def _export_processed_data(self) -> Optional[str]:
         """Export processed data to CSV files"""

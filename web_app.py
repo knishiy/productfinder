@@ -101,7 +101,7 @@ def stop_pipeline():
 
 @app.route('/api/results_view')
 def results_view():
-    """Get results for display"""
+    """Get results for display - shows exact same data as terminal pipeline"""
     global cached_results
     
     # Try to get scoring results first
@@ -112,39 +112,103 @@ def results_view():
     if cached_results and cached_results.get("market_products"):
         return jsonify(cached_results["market_products"])
     
-    # If no cached results, try to show summary from pipeline reports
-    report_files = sorted(glob.glob("data/reports/pipeline_summary_*.json"), reverse=True)
-    if report_files:
-        with open(report_files[0], 'r', encoding='utf-8') as f:
-            report_data = json.load(f)
-            pipeline_execution = report_data.get("pipeline_execution", {})
-            total_market_products = pipeline_execution.get("total_market_products", 0)
-            
-            if total_market_products > 0:
-                # Create a summary view since we don't have individual products
-                summary_data = [{
-                    "rank": 1,
-                    "title": f"Pipeline Results Summary",
-                    "final_score": "N/A",
-                    "margin_score": "N/A", 
-                    "demand_score": "N/A",
-                    "trend_score": "N/A",
-                    "is_winner": False,
-                    "landed_cost": "N/A",
-                    "sell_price": 0.0,
-                    "lead_time_days": "N/A",
-                    "seller_rating": "N/A",
-                    "competition_density": "N/A",
-                    "price_stability": "N/A",
-                    "summary_info": {
-                        "total_market_products": total_market_products,
-                        "total_supplier_products": pipeline_execution.get("total_supplier_products", 0),
-                        "total_matches": pipeline_execution.get("total_matches", 0),
-                        "winning_products": pipeline_execution.get("winning_products", 0),
-                        "trends_analyzed": report_data.get("trends_analyzed", [])
-                    }
-                }]
-                return jsonify(summary_data)
+    # If no cached results, try to show actual market products from latest pipeline run
+    # This will show the EXACT same data as the terminal pipeline
+    try:
+        # Find the latest pipeline run data
+        pipeline_data_dir = "data/pipeline_runs"
+        if os.path.exists(pipeline_data_dir):
+            run_files = sorted([f for f in os.listdir(pipeline_data_dir) if f.endswith('.json')], reverse=True)
+            if run_files:
+                latest_run_file = os.path.join(pipeline_data_dir, run_files[0])
+                with open(latest_run_file, 'r', encoding='utf-8') as f:
+                    run_data = json.load(f)
+                    
+                # Extract market products exactly as they appear in terminal
+                market_products = run_data.get("market_products", {})
+                if market_products:
+                    # Convert to list format for display, preserving all original attributes
+                    products_list = []
+                    for i, (item_id, product_data) in enumerate(market_products.items()):
+                        # Create product object with ALL the same attributes as terminal
+                        product_obj = {
+                            "rank": i + 1,
+                            "item_id": item_id,
+                            "title": product_data.get("title", "Unknown Product"),
+                            "price": product_data.get("price", 0.0),
+                            "currency": product_data.get("currency", "USD"),
+                            "image_url": product_data.get("image_url", ""),
+                            "item_web_url": product_data.get("item_web_url", ""),
+                            "seller_username": product_data.get("seller_username", ""),
+                            "seller_feedback_score": product_data.get("seller_feedback_score", 0),
+                            "seller_positive_feedback_percent": product_data.get("seller_positive_feedback_percent", 0.0),
+                            "buying_options": product_data.get("buying_options", []),
+                            "condition": product_data.get("condition", ""),
+                            "category_id": product_data.get("category_id", ""),
+                            "category_name": product_data.get("category_name", ""),
+                            "location": product_data.get("location", ""),
+                            "shipping_cost": product_data.get("shipping_cost", 0.0),
+                            "shipping_type": product_data.get("shipping_type", ""),
+                            "top_rated_seller": product_data.get("top_rated_seller", False),
+                            "best_offer_enabled": product_data.get("best_offer_enabled", False),
+                            "listing_type": product_data.get("listing_type", ""),
+                            "end_time": product_data.get("end_time", ""),
+                            "is_best_seller": product_data.get("is_best_seller", False),
+                            "merchandised_rank": product_data.get("merchandised_rank"),
+                            # Add display fields for UI
+                            "final_score": "N/A",
+                            "margin_score": "N/A",
+                            "demand_score": "N/A",
+                            "trend_score": "N/A",
+                            "is_winner": False,
+                            "landed_cost": "N/A",
+                            "lead_time_days": "N/A",
+                            "competition_density": "N/A",
+                            "price_stability": "N/A"
+                        }
+                        products_list.append(product_obj)
+                    
+                    logger.info(f"Returning {len(products_list)} market products from pipeline run data")
+                    return jsonify(products_list)
+        
+        # Fallback: try to show summary from pipeline reports
+        report_files = sorted(glob.glob("data/reports/pipeline_summary_*.json"), reverse=True)
+        if report_files:
+            with open(report_files[0], 'r', encoding='utf-8') as f:
+                report_data = json.load(f)
+                pipeline_execution = report_data.get("pipeline_execution", {})
+                total_market_products = pipeline_execution.get("total_market_products", 0)
+                
+                if total_market_products > 0:
+                    # Create a summary view since we don't have individual products
+                    summary_data = [{
+                        "rank": 1,
+                        "title": f"Pipeline Results Summary - {total_market_products} Products Collected",
+                        "final_score": "N/A",
+                        "margin_score": "N/A", 
+                        "demand_score": "N/A",
+                        "trend_score": "N/A",
+                        "is_winner": False,
+                        "landed_cost": "N/A",
+                        "sell_price": 0.0,
+                        "lead_time_days": "N/A",
+                        "seller_rating": "N/A",
+                        "competition_density": "N/A",
+                        "price_stability": "N/A",
+                        "summary_info": {
+                            "total_market_products": total_market_products,
+                            "total_supplier_products": pipeline_execution.get("total_supplier_products", 0),
+                            "total_matches": pipeline_execution.get("total_matches", 0),
+                            "winning_products": pipeline_execution.get("winning_products", 0),
+                            "trends_analyzed": report_data.get("trends_analyzed", []),
+                            "message": "Click 'Start Pipeline' to collect fresh data and see individual products"
+                        }
+                    }]
+                    return jsonify(summary_data)
+    
+    except Exception as e:
+        logger.error(f"Error in results_view: {e}")
+        return jsonify([{"error": f"Failed to load results: {str(e)}"}])
     
     # No results available
     return jsonify([])
