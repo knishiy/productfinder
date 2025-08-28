@@ -75,10 +75,16 @@ class EbayETL:
             }
             data = {
                 "grant_type": "client_credentials",
-                "scope": "https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/buy.browse"
+                "scope": "https://api.ebay.com/oauth/api_scope"
             }
             
             response = self.session.post(url, headers=headers, data=data)
+            
+            # Log the response for debugging
+            logger.info(f"eBay auth response status: {response.status_code}")
+            if response.status_code != 200:
+                logger.error(f"eBay auth error response: {response.text}")
+            
             response.raise_for_status()
             
             token_data = response.json()

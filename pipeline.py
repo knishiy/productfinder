@@ -176,9 +176,25 @@ class WinningProductPipeline:
             ebay_config = dget(sources, "ebay", {})
             if dget(ebay_config, "enabled", False):
                 try:
-                    token = get_token()  # This will use environment variables
-                    self.ebay_etl = {"token": token, "enabled": True}
-                    logger.info("eBay ETL initialized successfully with token")
+                    # Import and initialize the proper EbayETL class
+                    from etl.ebay import EbayETL
+                    import os
+                    
+                    client_id = os.environ.get("EBAY_CLIENT_ID")
+                    client_secret = os.environ.get("EBAY_CLIENT_SECRET")
+                    
+                    if not client_id or not client_secret:
+                        raise ValueError("EBAY_CLIENT_ID and EBAY_CLIENT_SECRET environment variables not set")
+                    
+                    # Create proper EbayETL instance
+                    self.ebay_etl = EbayETL(client_id, client_secret)
+                    
+                    # Authenticate
+                    if self.ebay_etl.authenticate():
+                        logger.info("eBay ETL initialized successfully with proper authentication")
+                    else:
+                        raise RuntimeError("eBay authentication failed")
+                        
                 except Exception as e:
                     logger.error(f"eBay ETL initialization failed: {e}")
                     import traceback
@@ -432,37 +448,35 @@ class WinningProductPipeline:
             # Collect data for each category
             for category_id in categories:
                 try:
-                    # Search for each keyword in this category (this gives us trend data via item creation dates)
+                    # Search for each keyword in this category using the proper EbayETL method
                     for keyword in keywords:
-                        search_items_result = search_items(
-                            self.ebay_etl["token"], 
-                            q=keyword, 
-                            category_id=category_id, 
-                            limit=limit//len(keywords)
-                        )
-                        
-                        # Normalize search results - eBay ETL returns list directly
-                        if search_items_result is None:
-                            search_items_result = []
-                        elif isinstance(search_items_result, dict):
-                            # Handle case where response might be wrapped in dict
-                            search_items_result = search_items_result.get("itemSummaries", [])
-                        # If it's already a list (from ETL), use it directly
-                        
-                        # Store products
-                        for item in search_items_result:
-                            if item.get("itemId"):
-                                # Create a simple product object
-                                product = type('Product', (), {
-                                    'item_id': item.get("itemId"),
-                                    'title': item.get("title", ""),
-                                    'price': float(item.get("price", {}).get("value", 0)),
-                                    'image_url': item.get("image", {}).get("imageUrl", ""),
-                                    'category_id': category_id,
-                                    'is_best_seller': False  # We'll determine this based on creation date and price
-                                })()
+                        try:
+                            # Use the proper EbayETL.search_products method instead of simplified search_items
+                            if hasattr(self.ebay_etl, 'search_products'):
+                                # Use the full EbayETL class method
+                                search_items_result = self.ebay_etl.search_products(
+                                    query=keyword,
+                                    category_id=category_id,
+                                    limit=limit//len(keywords)
+                                )
+                            else:
+                                # Fallback to simplified method if EbayETL not properly initialized
+                                logger.warning("EbayETL not properly initialized, using fallback search")
+                                search_items_result = []
+                            
+                            # Store products - EbayETL.search_products returns List[EbayProduct] objects
+                            if search_items_result and isinstance(search_items_result, list):
+                                for product in search_items_result:
+                                    if hasattr(product, 'item_id') and product.item_id:
+                                        # Product is already a proper EbayProduct object
+                                        self.market_products[product.item_id] = product
+                                        logger.debug(f"Added product: {product.title[:50]}...")
+                            else:
+                                logger.warning(f"No search results for keyword '{keyword}' in category {category_id}")
                                 
-                                self.market_products[product.item_id] = product
+                        except Exception as e:
+                            logger.error(f"Failed to search for keyword '{keyword}' in category {category_id}: {e}")
+                            continue
                         
                         # Rate limiting
                         time.sleep(0.1)
