@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pipeline Debug Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .log-entry { margin: 2px 0; padding: 4px 8px; border-radius: 4px; }
+        .log-INFO { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .log-WARNING { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .log-ERROR { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        .log-DEBUG { background-color: #e2e3e5; border-left: 4px solid #6c757d; }
+        .status-card { margin: 10px 0; }
+        .log-container { max-height: 400px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4">🔍 Pipeline Debug Dashboard</h1>
+        
+        <!-- Control Buttons -->
+        <div class="row mb-4">
+            <div class="col">
+                <button class="btn btn-primary" onclick="refreshAll()">🔄 Refresh All</button>
+                <button class="btn btn-success" onclick="startPipeline()">▶️ Start Pipeline</button>
+                <button class="btn btn-warning" onclick="stopPipeline()">⏹️ Stop Pipeline</button>
+                <button class="btn btn-info" onclick="viewResults()">📊 View Results</button>
+            </div>
+        </div>
+
+        <!-- Status Cards -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card status-card">
+                    <div class="card-header">
+                        <h5>📊 Pipeline Status</h5>
+                    </div>
+                    <div class="card-body" id="pipelineStatus">
+                        <p>Loading...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card status-card">
+                    <div class="card-header">
+                        <h5>🔍 Debug Results</h5>
+                    </div>
+                    <div class="card-body" id="debugResults">
+                        <p>Loading...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Logs -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5>📝 Live Pipeline Logs</h5>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="clearLogs()">Clear</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="log-container" id="liveLogs">
+                            <p>Loading logs...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Display -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>📋 Results View</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="resultsDisplay">
+                            <p>Click "View Results" to see pipeline data</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let refreshInterval;
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshAll();
+            // Auto-refresh every 2 seconds
+            refreshInterval = setInterval(refreshAll, 2000);
+        });
+
+        async function refreshAll() {
+            await Promise.all([
+                refreshPipelineStatus(),
+                refreshDebugResults(),
+                refreshLiveLogs()
+            ]);
+        }
+
+        async function refreshPipelineStatus() {
+            try {
+                const response = await fetch('/api/pipeline_status');
+                const data = await response.json();
+                
+                const statusHtml = `
+                    <div class="mb-2">
+                        <strong>Status:</strong> 
+                        <span class="badge ${data.running ? 'bg-success' : 'bg-secondary'}">
+                            ${data.running ? 'Running' : 'Idle'}
+                        </span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>Current Step:</strong> ${data.current_step || 'None'}
+                    </div>
+                    <div class="mb-2">
+                        <strong>Progress:</strong> 
+                        <div class="progress">
+                            <div class="progress-bar" style="width: ${data.progress}%">${data.progress}%</div>
+                        </div>
+                    </div>
+                    ${data.error ? `<div class="text-danger"><strong>Error:</strong> ${data.error}</div>` : ''}
+                    ${data.results ? `
+                        <div class="mt-3">
+                            <strong>Results:</strong>
+                            <ul class="list-unstyled">
+                                <li>Market Products: ${data.results.total_market_products || 0}</li>
+                                <li>Supplier Products: ${data.results.total_supplier_products || 0}</li>
+                                <li>Matches: ${data.results.total_matches || 0}</li>
+                                <li>Winning Products: ${data.results.winning_products || 0}</li>
+                            </ul>
+                        </div>
+                    ` : ''}
+                `;
+                
+                document.getElementById('pipelineStatus').innerHTML = statusHtml;
+            } catch (error) {
+                document.getElementById('pipelineStatus').innerHTML = `<p class="text-danger">Error: ${error.message}</p>`;
+            }
+        }
+
+        async function refreshDebugResults() {
+            try {
+                const response = await fetch('/api/debug/results');
+                const data = await response.json();
+                
+                const debugHtml = `
+                    <div class="mb-2">
+                        <strong>Cached Results:</strong>
+                        <ul class="list-unstyled">
+                            <li>Exists: ${data.cached_results.cached_results_exists ? 'Yes' : 'No'}</li>
+                            <li>Market Products: ${data.cached_results.total_market_products}</li>
+                            <li>Supplier Products: ${data.cached_results.total_supplier_products}</li>
+                        </ul>
+                    </div>
+                    ${data.pipeline_runs.latest_file ? `
+                        <div class="mb-2">
+                            <strong>Latest Pipeline Run:</strong>
+                            <ul class="list-unstyled">
+                                <li>File: ${data.pipeline_runs.latest_file}</li>
+                                <li>Market Products: ${data.pipeline_runs.total_market_products}</li>
+                                <li>Status: ${data.pipeline_runs.pipeline_status}</li>
+                                <li>Timestamp: ${data.pipeline_runs.timestamp}</li>
+                            </ul>
+                        </div>
+                    ` : '<p>No pipeline runs found</p>'}
+                `;
+                
+                document.getElementById('debugResults').innerHTML = debugHtml;
+            } catch (error) {
+                document.getElementById('debugResults').innerHTML = `<p class="text-danger">Error: ${error.message}</p>`;
+            }
+        }
+
+        async function refreshLiveLogs() {
+            try {
+                const response = await fetch('/api/live_logs');
+                const data = await response.json();
+                
+                let logsHtml = '';
+                if (data.logs && data.logs.length > 0) {
+                    data.logs.forEach(log => {
+                        const logClass = `log-${log.level}`;
+                        logsHtml += `
+                            <div class="log-entry ${logClass}">
+                                <small class="text-muted">[${log.timestamp}] ${log.level}</small>
+                                <br><strong>${log.module}:</strong> ${log.message}
+                            </div>
+                        `;
+                    });
+                } else {
+                    logsHtml = '<p>No logs available</p>';
+                }
+                
+                document.getElementById('liveLogs').innerHTML = logsHtml;
+                
+                // Auto-scroll to bottom
+                const logContainer = document.getElementById('liveLogs');
+                logContainer.scrollTop = logContainer.scrollHeight;
+            } catch (error) {
+                document.getElementById('liveLogs').innerHTML = `<p class="text-danger">Error: ${error.message}</p>`;
+            }
+        }
+
+        async function startPipeline() {
+            try {
+                const response = await fetch('/api/start_pipeline', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await response.json();
+                alert(data.message || 'Pipeline started');
+                refreshAll();
+            } catch (error) {
+                alert('Error starting pipeline: ' + error.message);
+            }
+        }
+
+        async function stopPipeline() {
+            try {
+                const response = await fetch('/api/stop_pipeline', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                alert(data.message || 'Pipeline stopped');
+                refreshAll();
+            } catch (error) {
+                alert('Error stopping pipeline: ' + error.message);
+            }
+        }
+
+        async function viewResults() {
+            try {
+                const response = await fetch('/api/results_view');
+                const data = await response.json();
+                
+                let resultsHtml = '';
+                if (data && data.length > 0) {
+                    if (data[0].summary_info) {
+                        // Summary view
+                        const summary = data[0];
+                        resultsHtml = `
+                            <h6>${summary.title}</h6>
+                            <ul class="list-unstyled">
+                                <li>Market Products: ${summary.summary_info.total_market_products}</li>
+                                <li>Supplier Products: ${summary.summary_info.total_supplier_products}</li>
+                                <li>Matches: ${summary.summary_info.total_matches}</li>
+                                <li>Winning Products: ${summary.summary_info.winning_products}</li>
+                            </ul>
+                            <p class="text-muted">${summary.summary_info.message}</p>
+                        `;
+                    } else {
+                        // Product list view
+                        resultsHtml = `<h6>Found ${data.length} products:</h6>`;
+                        data.slice(0, 10).forEach(product => {
+                            resultsHtml += `
+                                <div class="border-bottom p-2">
+                                    <strong>${product.title}</strong><br>
+                                    <small>Price: $${product.price} | Seller: ${product.seller_username} | Rating: ${product.seller_feedback_score}</small>
+                                </div>
+                            `;
+                        });
+                        if (data.length > 10) {
+                            resultsHtml += `<p class="text-muted">... and ${data.length - 10} more products</p>`;
+                        }
+                    }
+                } else {
+                    resultsHtml = '<p class="text-muted">No results available</p>';
+                }
+                
+                document.getElementById('resultsDisplay').innerHTML = resultsHtml;
+            } catch (error) {
+                document.getElementById('resultsDisplay').innerHTML = `<p class="text-danger">Error: ${error.message}</p>`;
+            }
+        }
+
+        function clearLogs() {
+            document.getElementById('liveLogs').innerHTML = '<p>Logs cleared</p>';
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        });
+    </script>
+</body>
+</html>

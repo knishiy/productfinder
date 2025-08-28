@@ -31,14 +31,52 @@ pipeline_status = {
     "results": None
 }
 
+# Live logging system
+pipeline_logs = []
+max_log_entries = 100
+
 cached_results = None
 pipeline_thread = None
+
+# Custom logging handler to capture pipeline logs
+class PipelineLogHandler(logging.Handler):
+    def emit(self, record):
+        global pipeline_logs
+        
+        # Format the log message
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "module": record.module
+        }
+        
+        # Add to pipeline logs
+        pipeline_logs.append(log_entry)
+        
+        # Keep only the last max_log_entries
+        if len(pipeline_logs) > max_log_entries:
+            pipeline_logs.pop(0)
+        
+        # Also print to console for debugging
+        print(f"[{log_entry['timestamp']}] {log_entry['level']}: {log_entry['message']}")
+
+# Add the custom handler to the root logger
+root_logger = logging.getLogger()
+pipeline_handler = PipelineLogHandler()
+pipeline_handler.setLevel(logging.INFO)
+root_logger.addHandler(pipeline_handler)
 
 @app.route('/')
 @app.route('/dashboard')
 def dashboard():
     """Main dashboard page"""
     return render_template('dashboard.html')
+
+@app.route('/debug')
+def debug_dashboard():
+    """Debug dashboard page - shows live pipeline logs and debug info"""
+    return render_template('debug_dashboard.html')
 
 @app.route('/api/pipeline_status')
 def get_pipeline_status():
@@ -552,6 +590,22 @@ def health_check():
         "pipeline_running": pipeline_status["running"]
     })
 
+@app.route('/api/test_logging')
+def test_logging():
+    """Test endpoint to verify logging is working"""
+    global pipeline_logs
+    
+    # Add a test log entry
+    test_message = f"Test log entry at {datetime.now().isoformat()}"
+    logger.info(test_message)
+    
+    return jsonify({
+        "message": "Test logging completed",
+        "total_logs": len(pipeline_logs),
+        "latest_logs": pipeline_logs[-5:] if pipeline_logs else [],
+        "test_message": test_message
+    })
+
 @app.route('/api/debug/results')
 def debug_results():
     """Debug endpoint to see what results are available"""
@@ -576,11 +630,93 @@ def debug_results():
         except Exception as e:
             latest_report = {"error": str(e)}
     
+    # Check pipeline runs directory
+    pipeline_runs_info = {}
+    pipeline_data_dir = "data/pipeline_runs"
+    if os.path.exists(pipeline_data_dir):
+        run_files = sorted([f for f in os.listdir(pipeline_data_dir) if f.endswith('.json')], reverse=True)
+        if run_files:
+            try:
+                latest_run_file = os.path.join(pipeline_data_dir, run_files[0])
+                with open(latest_run_file, 'r', encoding='utf-8') as f:
+                    run_data = json.load(f)
+                pipeline_runs_info = {
+                    "latest_file": run_files[0],
+                    "total_market_products": run_data.get("total_market_products", 0),
+                    "pipeline_status": run_data.get("pipeline_status", "unknown"),
+                    "timestamp": run_data.get("timestamp", "unknown")
+                }
+            except Exception as e:
+                pipeline_runs_info = {"error": str(e)}
+    
     return jsonify({
         "cached_results": cached_info,
         "latest_report": latest_report,
+        "pipeline_runs": pipeline_runs_info,
         "pipeline_status": pipeline_status
     })
+
+@app.route('/api/live_logs')
+def get_live_logs():
+    """Get live pipeline execution logs - shows what's happening in real-time"""
+    global pipeline_logs
+    
+    try:
+        # Check if pipeline is running
+        if not pipeline_status["running"]:
+            return jsonify({
+                "status": "idle",
+                "message": "Pipeline is not currently running",
+                "logs": pipeline_logs[-20:] if pipeline_logs else []  # Show last 20 logs even when idle
+            })
+        
+        # Get current pipeline status
+        current_status = {
+            "running": pipeline_status["running"],
+            "current_step": pipeline_status["current_step"],
+            "progress": pipeline_status["progress"],
+            "error": pipeline_status["error"]
+        }
+        
+        # Check for recent pipeline output files
+        output_files = []
+        if pipeline_status.get("results") and pipeline_status["results"].get("output_files"):
+            output_files = pipeline_status["results"]["output_files"]
+        
+        # Check for latest pipeline run data
+        pipeline_data_dir = "data/pipeline_runs"
+        latest_run_info = None
+        if os.path.exists(pipeline_data_dir):
+            run_files = sorted([f for f in os.listdir(pipeline_data_dir) if f.endswith('.json')], reverse=True)
+            if run_files:
+                try:
+                    latest_run_file = os.path.join(pipeline_data_dir, run_files[0])
+                    with open(latest_run_file, 'r', encoding='utf-8') as f:
+                        run_data = json.load(f)
+                    latest_run_info = {
+                        "file": run_files[0],
+                        "total_market_products": run_data.get("total_market_products", 0),
+                        "pipeline_status": run_data.get("pipeline_status", "unknown"),
+                        "timestamp": run_data.get("timestamp", "unknown")
+                    }
+                except Exception as e:
+                    latest_run_info = {"error": str(e)}
+        
+        return jsonify({
+            "status": "running",
+            "current_status": current_status,
+            "output_files": output_files,
+            "latest_run_info": latest_run_info,
+            "logs": pipeline_logs[-50:] if pipeline_logs else [],  # Show last 50 logs when running
+            "message": "Pipeline is currently running - check logs for real-time updates"
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Error getting live logs: {str(e)}",
+            "logs": pipeline_logs[-20:] if pipeline_logs else []
+        })
 
 # ML Analysis endpoints
 @app.route('/ml_analysis')
