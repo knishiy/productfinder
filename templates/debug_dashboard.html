@@ -26,6 +26,8 @@
                 <button class="btn btn-success" onclick="startPipeline()">▶️ Start Pipeline</button>
                 <button class="btn btn-warning" onclick="stopPipeline()">⏹️ Stop Pipeline</button>
                 <button class="btn btn-info" onclick="viewResults()">📊 View Results</button>
+                <button class="btn btn-secondary" onclick="refreshLogs()">📝 Refresh Logs</button>
+                <button class="btn btn-dark" onclick="checkDataFiles()">📁 Check Data Files</button>
             </div>
         </div>
 
@@ -210,19 +212,76 @@
             }
         }
 
+        // Add manual log refresh function
+        async function refreshLogs() {
+            try {
+                const response = await fetch('/api/test_logging');
+                const data = await response.json();
+                console.log('Test logging response:', data);
+                
+                // Force refresh of live logs
+                await refreshLiveLogs();
+                
+                // Also refresh debug results to see what's available
+                await refreshDebugResults();
+            } catch (error) {
+                console.error('Error refreshing logs:', error);
+            }
+        }
+
         async function startPipeline() {
             try {
+                console.log('Starting pipeline...');
                 const response = await fetch('/api/start_pipeline', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({})
                 });
                 const data = await response.json();
+                console.log('Pipeline start response:', data);
                 alert(data.message || 'Pipeline started');
-                refreshAll();
+                
+                // Start monitoring the pipeline
+                startPipelineMonitoring();
+                
             } catch (error) {
+                console.error('Error starting pipeline:', error);
                 alert('Error starting pipeline: ' + error.message);
             }
+        }
+
+        // Monitor pipeline progress
+        let pipelineMonitorInterval;
+        function startPipelineMonitoring() {
+            if (pipelineMonitorInterval) {
+                clearInterval(pipelineMonitorInterval);
+            }
+            
+            pipelineMonitorInterval = setInterval(async () => {
+                try {
+                    const response = await fetch('/api/pipeline_status');
+                    const status = await response.json();
+                    
+                    console.log('Pipeline status:', status);
+                    
+                    if (!status.running) {
+                        console.log('Pipeline finished, stopping monitor');
+                        clearInterval(pipelineMonitorInterval);
+                        
+                        // Refresh all data
+                        await refreshAll();
+                        
+                        // Show completion message
+                        if (status.results) {
+                            alert(`Pipeline completed! Found ${status.results.total_market_products} market products.`);
+                        } else {
+                            alert('Pipeline completed but no results found.');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error monitoring pipeline:', error);
+                }
+            }, 1000); // Check every second
         }
 
         async function stopPipeline() {
@@ -241,6 +300,22 @@
 
         async function viewResults() {
             try {
+                // First, let's check what's available in debug results
+                const debugResponse = await fetch('/api/debug/results');
+                const debugData = await debugResponse.json();
+                
+                let debugHtml = `
+                    <div class="alert alert-info">
+                        <h6>🔍 Debug Information:</h6>
+                        <ul class="list-unstyled">
+                            <li><strong>Cached Results:</strong> ${debugData.cached_results.cached_results_exists ? 'Yes' : 'No'}</li>
+                            <li><strong>Market Products:</strong> ${debugData.cached_results.total_market_products}</li>
+                            <li><strong>Pipeline Runs:</strong> ${debugData.pipeline_runs.latest_file || 'None'}</li>
+                        </ul>
+                    </div>
+                `;
+                
+                // Now try to get actual results
                 const response = await fetch('/api/results_view');
                 const data = await response.json();
                 
@@ -250,18 +325,24 @@
                         // Summary view
                         const summary = data[0];
                         resultsHtml = `
-                            <h6>${summary.title}</h6>
-                            <ul class="list-unstyled">
-                                <li>Market Products: ${summary.summary_info.total_market_products}</li>
-                                <li>Supplier Products: ${summary.summary_info.total_supplier_products}</li>
-                                <li>Matches: ${summary.summary_info.total_matches}</li>
-                                <li>Winning Products: ${summary.summary_info.winning_products}</li>
-                            </ul>
-                            <p class="text-muted">${summary.summary_info.message}</p>
+                            <div class="alert alert-success">
+                                <h6>📊 ${summary.title}</h6>
+                                <ul class="list-unstyled">
+                                    <li>Market Products: ${summary.summary_info.total_market_products}</li>
+                                    <li>Supplier Products: ${summary.summary_info.total_supplier_products}</li>
+                                    <li>Matches: ${summary.summary_info.total_matches}</li>
+                                    <li>Winning Products: ${summary.summary_info.winning_products}</li>
+                                </ul>
+                                <p class="text-muted">${summary.summary_info.message}</p>
+                            </div>
                         `;
                     } else {
                         // Product list view
-                        resultsHtml = `<h6>Found ${data.length} products:</h6>`;
+                        resultsHtml = `
+                            <div class="alert alert-success">
+                                <h6>✅ Found ${data.length} products:</h6>
+                            </div>
+                        `;
                         data.slice(0, 10).forEach(product => {
                             resultsHtml += `
                                 <div class="border-bottom p-2">
@@ -275,12 +356,35 @@
                         }
                     }
                 } else {
-                    resultsHtml = '<p class="text-muted">No results available</p>';
+                    resultsHtml = `
+                        <div class="alert alert-warning">
+                            <h6>⚠️ No Results Available</h6>
+                            <p>This could mean:</p>
+                            <ul>
+                                <li>The pipeline hasn't run yet</li>
+                                <li>The pipeline ran but didn't collect data</li>
+                                <li>There's an issue with data storage</li>
+                            </ul>
+                            <p><strong>Try running the pipeline first, then check the logs above.</strong></p>
+                        </div>
+                    `;
                 }
                 
-                document.getElementById('resultsDisplay').innerHTML = resultsHtml;
+                // Combine debug info and results
+                document.getElementById('resultsDisplay').innerHTML = debugHtml + resultsHtml;
+                
+                // Also refresh the debug results to show current state
+                await refreshDebugResults();
+                
             } catch (error) {
-                document.getElementById('resultsDisplay').innerHTML = `<p class="text-danger">Error: ${error.message}</p>`;
+                document.getElementById('resultsDisplay').innerHTML = `
+                    <div class="alert alert-danger">
+                        <h6>❌ Error Loading Results:</h6>
+                        <p>${error.message}</p>
+                        <p><strong>Check the console for more details.</strong></p>
+                    </div>
+                `;
+                console.error('Error in viewResults:', error);
             }
         }
 
@@ -288,10 +392,67 @@
             document.getElementById('liveLogs').innerHTML = '<p>Logs cleared</p>';
         }
 
+        // Check data files to see what's actually stored
+        async function checkDataFiles() {
+            try {
+                console.log('Checking data files...');
+                
+                // Check pipeline runs
+                const pipelineResponse = await fetch('/api/debug/results');
+                const pipelineData = await pipelineResponse.json();
+                
+                let filesHtml = `
+                    <div class="alert alert-info">
+                        <h6>📁 Data Files Status:</h6>
+                        <ul class="list-unstyled">
+                            <li><strong>Pipeline Runs:</strong> ${pipelineData.pipeline_runs.latest_file || 'None'}</li>
+                            <li><strong>Cached Results:</strong> ${pipelineData.cached_results.cached_results_exists ? 'Yes' : 'No'}</li>
+                        </ul>
+                    </div>
+                `;
+                
+                // Check if we can access the results endpoint
+                try {
+                    const resultsResponse = await fetch('/api/results_view');
+                    const resultsData = await resultsResponse.json();
+                    
+                    filesHtml += `
+                        <div class="alert alert-success">
+                            <h6>📊 Results Endpoint:</h6>
+                            <p>Returns ${resultsData.length} items</p>
+                            ${resultsData.length > 0 ? `<p>First item: ${JSON.stringify(resultsData[0], null, 2)}</p>` : '<p>No items returned</p>'}
+                        </div>
+                    `;
+                } catch (error) {
+                    filesHtml += `
+                        <div class="alert alert-danger">
+                            <h6>❌ Results Endpoint Error:</h6>
+                            <p>${error.message}</p>
+                        </div>
+                    `;
+                }
+                
+                // Display in results section
+                document.getElementById('resultsDisplay').innerHTML = filesHtml;
+                
+            } catch (error) {
+                console.error('Error checking data files:', error);
+                document.getElementById('resultsDisplay').innerHTML = `
+                    <div class="alert alert-danger">
+                        <h6>❌ Error Checking Data Files:</h6>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
         // Cleanup on page unload
         window.addEventListener('beforeunload', function() {
             if (refreshInterval) {
                 clearInterval(refreshInterval);
+            }
+            if (pipelineMonitorInterval) {
+                clearInterval(pipelineMonitorInterval);
             }
         });
     </script>
